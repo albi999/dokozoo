@@ -215,7 +215,7 @@ class DokoEnvironment(AECEnv):
         if firstcard in range(16,19):
             nont_spades = cards[(16 <= cards) & (cards <= 18)]
             if np.any(nont_spades):
-                action_mask[nont_spades-1]
+                action_mask[nont_spades-1] = 1
                 return action_mask
             else: 
                 action_mask[cards-1] = 1
