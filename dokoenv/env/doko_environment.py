@@ -1,13 +1,16 @@
 import random
-from copy import copy, deepcopy
+from typing import Union
+from copy import copy
 import numpy as np
 from gymnasium.spaces import Discrete, MultiBinary, MultiDiscrete, Dict as SpaceDict
+import gymnasium
 # from gymnasium.utils import EzPickle
 # TODO: Pickleeeee
 
 
 from pettingzoo import AECEnv
 from pettingzoo.utils.agent_selector import agent_selector
+from pettingzoo.utils import wrappers
 
 
 
@@ -37,13 +40,23 @@ i   action   card
 19  18       [♥A]  
 20  19       [♥K]  
 """
-class DokoEnvironment(AECEnv):
+
+
+def env(**kwargs):
+    env = raw_env(**kwargs)
+    env = wrappers.TerminateIllegalWrapper(env, illegal_reward=-1)
+    env = wrappers.AssertOutOfBoundsWrapper(env)
+    env = wrappers.OrderEnforcingWrapper(env)
+    return env
+
+class raw_env(AECEnv):
     metadata = {
         "name": "doko_environment_v0",
+        "render_modes": ["ansi"]
     }
 
 
-    def __init__(self):
+    def __init__(self, render_mode: Union[str, None] = None):
         """The init method takes in environment arguments.
 
         Should define the following attributes:
@@ -62,12 +75,20 @@ class DokoEnvironment(AECEnv):
 
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
         self.round = None
+
+
         self.player_cards = None
-        self.starter = None # player starting at the beginning of the game
+        self.player_points = None
+        self.team_points = None
         self.cards_played = None
         self.tricks_won_by = None
-        # TODO: werde definitiv augen aufnehmen müssen
 
+
+        # agent selection attributes
+        self.agent_selection = None
+        self.starter = None # player starting at the beginning of the game
+
+        self.render_mode = render_mode
 
     
     
@@ -100,19 +121,29 @@ class DokoEnvironment(AECEnv):
             3: player3_cards,
             4: player4_cards
         }
+        self.player_points = {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0
+        }
+        # team 1 = Re
+        # team 2 = Kontra
+        self.team_points = {
+            1: 0,
+            2: 0
+        }
 
 
-        # TODO should be random who starts
-        self._agent_selector = agent_selector(self.agents)
-        self.agent_selection = self._agent_selector.reset()
-        self.starter = int(self.agent_selection[6]) # starter between 1 and 4 
-
-
+        
         # no cards played so far, no tricks won by anyone
         self.cards_played = np.zeros((10,4), dtype=np.int64)
         self.tricks_won_by = np.zeros(10, dtype=np.int64)
 
-        
+        # TODO should be random who starts
+        self._agent_selector = agent_selector(self.agents)
+        self.agent_selection = self._agent_selector.reset()
+        self.starter = int(self.agent_selection[6]) # starter between 1 and 4
 
         # copy paste shit
         self.rewards = {i: 0 for i in self.agents}
@@ -130,6 +161,7 @@ class DokoEnvironment(AECEnv):
         ):
             return self._was_dead_step(action)
         
+        r = self.round
         agent = self.agent_selection
         agent_number = int(agent[6])
         cards_in_hand = self.player_cards[agent_number]
@@ -141,7 +173,7 @@ class DokoEnvironment(AECEnv):
             print("@step() action_card_index is empty")
         
         self.player_cards[agent_number] = cards_in_hand
-        self.cards_played[self.round][agent_number-1] = action+1
+        self.cards_played[r][agent_number-1] = action+1
 
         # TODO Check if action was allowed
         # but assuming action masking works, unnecessary
@@ -151,25 +183,49 @@ class DokoEnvironment(AECEnv):
         # check if trick is over
         if self._agent_selector.is_last():
             # compute trick winner 
-            winner = self.trick_winner_calc(self) # TODO Implement trick_winner_calc
-            self.tricks_won_by[self.round] = winner
-            # TODO Check if game ended
-            # if game ended: 
-            #   do_shit()
-            # else:
+            trick_winner = self.trick_winner_calc() 
+            self.tricks_won_by[r] = trick_winner
+            trick_points = self.trick_points_calc(self.cards_played[r])
+            self.player_points[trick_winner] += trick_points
+            
+            if self.render_mode == "ansi":
+                trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1]
+                print(f'round: {r}')
+                print(f'Trick Starter: {trick_starter}')
+                print(self.render())
+                print(f'Trick Winner: {trick_winner}')
+                print(f'Trick Points: {trick_points}')
+                print("#"*30)
+            #if game is over
+            # Implemented as free for all
+            # TODO: Change to team vs. team game
+            if r == 9:
+                players = list(self.player_points.keys())
+                values = np.array(list(self.player_points.values()))
+                max_index = np.argmax(values)
+                game_winner = players[max_index]
+                self.set_game_result(game_winner)
+                print(self.player_points)
+            
             agent_order = copy(self.possible_agents)
-            winner_string = f'player{winner}'
-            index = np.where(agent_order==winner_string)[0][0]
+            # trick_winner_string = f'player{trick_winner}'
+            index = trick_winner-1
             new_agent_order = np.concatenate((agent_order[index:], agent_order[:index]))
             self._agent_selector.reinit(new_agent_order)
+            self.round += 1
+        
+        self.agent_selection = self._agent_selector.next()
+        
 
-
+        
+        
 
 
         
 
     def observe(self, agent):
-        action_mask = self.action_mask_calc(self) if agent==self.agent_selection else []
+        # TODO add "knows_partner" bool to observations
+        action_mask = self.action_mask_calc() if agent==self.agent_selection else np.zeros(20, dtype=np.int8)
         player_number = int(self.agent_selection[6])
         observation = {
             "round": self.round,
@@ -183,7 +239,12 @@ class DokoEnvironment(AECEnv):
         return observation
 
     def render(self):
-        pass
+        if self.render_mode is None:
+            gymnasium.logger.warn(
+                "You are calling render method without specifying any render mode."
+            )
+        elif self.render_mode == "ansi":
+            return str(self.cards_played[self.round])
 
     def observation_space(self):
         observation_space = SpaceDict({
@@ -197,9 +258,16 @@ class DokoEnvironment(AECEnv):
 
     # 40 cards but because of Duplicates only 20 possible actions
     # theoretically only max. 10 actions but this should work as well
-    def action_space(self):
+    def action_space(self, agent):
         return Discrete(20) 
     
+
+    def set_game_result(self, game_winner):
+        for i, name in enumerate(self.agents):
+            self.terminations[name] = True
+            self.rewards[name] = 3 if name == f'player{game_winner}' else -1
+            self.infos[name] = {"legal_moves": []}
+
 
     def action_mask_calc(self):
         # initializing the action mask
@@ -215,8 +283,10 @@ class DokoEnvironment(AECEnv):
         r = self.round
         trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
         
+
         # if agent starts a trick he can play any card he has
         if trick_starter == int(self.agent_selection[6]): # player 1 to 4
+            action_mask[cards-1] = 1
             return action_mask
         
         # determining which cards was played first
@@ -235,7 +305,7 @@ class DokoEnvironment(AECEnv):
                 return action_mask
         
         # if first card non-Trump Clubs
-        if firstcard in range(13,16):
+        elif firstcard in range(13,16):
             nont_clubs = cards[(13 <= cards) & (cards <= 15)]
             if np.any(nont_clubs):
                 action_mask[nont_clubs-1] = 1
@@ -245,7 +315,7 @@ class DokoEnvironment(AECEnv):
                 return action_mask
         
         # if first card non-Trump Spades
-        if firstcard in range(16,19):
+        elif firstcard in range(16,19):
             nont_spades = cards[(16 <= cards) & (cards <= 18)]
             if np.any(nont_spades):
                 action_mask[nont_spades-1] = 1
@@ -255,7 +325,7 @@ class DokoEnvironment(AECEnv):
                 return action_mask
             
         # if first card non-Trump Hearts
-        if firstcard in range(19,21):
+        elif firstcard in range(19,21):
             nont_hearts = cards[(19 <= cards)]
             if np.any(nont_hearts):
                 action_mask[nont_hearts-1] = 1
@@ -269,3 +339,71 @@ class DokoEnvironment(AECEnv):
         return action_mask
 
 
+    def trick_winner_calc(self):
+        # getting round, trick starter
+        r = self.round
+        trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
+        trick = self.cards_played[r]
+        play_order = np.concatenate((trick[(trick_starter-1):], trick[:(trick_starter-1)]))
+        # if there are trumps involved, the highest first played trump wins
+        trumps = play_order[(play_order <= 12)]
+        if np.any(trumps):
+            win_card_index_playorder = np.argmin(play_order)
+            trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+            return trick_winner
+        # else: no trumps involved, highest, first played, suit-matching nontrump wins
+        else:
+            if play_order[0] in range(13,16):
+                nont_clubs_range = range(13,16)
+                mask = np.isin(play_order, nont_clubs_range)
+                nont_clubs_indices = np.where(mask)[0]
+                win_card_index_playorder = nont_clubs_indices[np.argmin(play_order[nont_clubs_indices])] 
+                # I know that's complicated as fuck
+                # Basically we get the index of the winning card BUT in the play_order which isn't always [p1, p2, p3, p4]
+                # So we add the difference between the trick_starter (value 1...4) and the first player (value 1)
+                # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_index_playorder=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
+                # TODO: Fix this shit, for example by making self.cards_played in right play order and infering who played what based on trick_starter
+                # maybe it doesn't make a difference but we avoid this crap
+                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                return trick_winner
+            elif play_order[0] in range(16,19):
+                nont_spades_range = range(16,19)
+                mask = np.isin(play_order, nont_spades_range)
+                nont_spades_indices = np.where(mask)[0]
+                win_card_index_playorder = nont_spades_indices[np.argmin(play_order[nont_spades_indices])] 
+                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                return trick_winner
+            if play_order[0] in range(19,21):
+                nont_hearts_range = range(19,21)
+                mask = np.isin(play_order, nont_hearts_range)
+                nont_hearts_indices = np.where(mask)[0]
+                win_card_index_playorder = nont_hearts_indices[np.argmin(play_order[nont_hearts_indices])] 
+                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                return trick_winner
+            
+            
+        
+        print("Something went wrong and your code fucking sucks")
+        print("We're at the end of trick_winner_calc()")  
+        return -1 
+    
+
+    def trick_points_calc(self, trick):
+        # here we see why we need doko_cards.py
+        # beacuse hard_coding is disgusting
+        trick_points = 0 
+        for card in trick:
+            # Aces
+            if card in (10,13,16,19):
+                trick_points += 11
+            elif card in (1,11,14,17):
+                trick_points += 10
+            elif card in (12,15,18,20):
+                trick_points += 4
+            elif card in (2,3,4,5):
+                trick_points += 3
+            elif card in (6,7,8,9):
+                trick_points += 2
+        
+        return trick_points
+            
