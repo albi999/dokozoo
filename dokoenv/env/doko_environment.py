@@ -68,7 +68,7 @@ class DokoEnvironment(AECEnv):
         self.tricks_won_by = None
         # TODO: werde definitiv augen aufnehmen müssen
 
-    
+
     
     
     def reset(self, seed=None, options=None):
@@ -123,13 +123,46 @@ class DokoEnvironment(AECEnv):
         
 
     def step(self, action):
+        # action number between 0 and 19 corresponding to cards between 1 and 20
         if (
             self.terminations[self.agent_selection]
             or self.truncations[self.agent_selection]
         ):
             return self._was_dead_step(action)
         
-        current_agent = self.agent_selection
+        agent = self.agent_selection
+        agent_number = int(agent[6])
+        cards_in_hand = self.player_cards[agent_number]
+        action_card_indices = np.where(cards_in_hand == action+1)[0]
+        if action_card_indices.size > 0:
+            cards_in_hand[action_card_indices[0]] = 0
+        else:
+            print("Something went wrong and your code fucking sucks")
+            print("@step() action_card_index is empty")
+        
+        self.player_cards[agent_number] = cards_in_hand
+        self.cards_played[self.round][agent_number-1] = action+1
+
+        # TODO Check if action was allowed
+        # but assuming action masking works, unnecessary
+        # but would be good practice I guess
+
+
+        # check if trick is over
+        if self._agent_selector.is_last():
+            # compute trick winner 
+            winner = self.trick_winner_calc(self) # TODO Implement trick_winner_calc
+            self.tricks_won_by[self.round] = winner
+            # TODO Check if game ended
+            # if game ended: 
+            #   do_shit()
+            # else:
+            agent_order = copy(self.possible_agents)
+            winner_string = f'player{winner}'
+            index = np.where(agent_order==winner_string)[0][0]
+            new_agent_order = np.concatenate((agent_order[index:], agent_order[:index]))
+            self._agent_selector.reinit(new_agent_order)
+
 
 
 
@@ -231,7 +264,8 @@ class DokoEnvironment(AECEnv):
                 action_mask[cards-1] = 1
                 return action_mask
 
-        print("Something went wrong and your code fucking sucks")  
+        print("Something went wrong and your code fucking sucks")
+        print("We're at the end of action_mask_calc()")  
         return action_mask
 
 
