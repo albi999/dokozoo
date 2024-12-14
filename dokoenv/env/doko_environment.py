@@ -60,18 +60,20 @@ class raw_env(AECEnv):
         """The init method takes in environment arguments.
 
         Should define the following attributes:
-        - round
-        - cards of each player
-        - possible_agents
-        - Cards in the middle?????
-
-        Note: as of v1.18.1, the action_spaces and observation_spaces attributes are deprecated.
-        Spaces should be defined in the action_space() and observation_space() methods.
-        If these methods are not overridden, spaces will be inferred from self.observation_spaces/action_spaces, raising a warning.
+        - possible_agents                   ['player1', 'player2', 'player3', 'player4']
+        - round                             0 ... 9 
+        - player_cards                      {1: player1_cards, ..., 4: player4_cards} TODO: dict to numpy array maybe?
+        - player_points                     [player1_points, ..., player4_points]
+        - team_points                       [team1_points, team2_points]
+        - current_card_index                0 ... 3
+        - tricks_won_by                     [3 1 3 4 0 0 0 0 0 0]: player3 won first trick, player1 won second trick, ..., playing fifth trick atm
+        - agent_selection                   'player1', ..., 'player4'
+        - starter                           1, ..., 4: player who started the game
+        - render_mode                       'ansi'
 
         These attributes should not be changed after initialization.
         """
-        # self.deck = None # I don't think I need it anymore. If I know 0 -> Hearts 10 and so forth, is more efficient I think
+        # self.deck = None # TODO I was stupid, bring back self.deck again
 
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
         self.round = None
@@ -80,6 +82,7 @@ class raw_env(AECEnv):
         self.player_cards = None
         self.player_points = None
         self.team_points = None
+        self.current_card_index = None 
         self.cards_played = None
         self.tricks_won_by = None
 
@@ -121,21 +124,12 @@ class raw_env(AECEnv):
             3: player3_cards,
             4: player4_cards
         }
-        self.player_points = {
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0
-        }
-        # team 1 = Re
-        # team 2 = Kontra
-        self.team_points = {
-            1: 0,
-            2: 0
-        }
+       
+        self.player_points = np.zeros(4, dtype=np.int64)
+        self.team_points = np.zeros(2, dtype=np.int64)
 
 
-        
+        self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
         # no cards played so far, no tricks won by anyone
         self.cards_played = np.zeros((10,4), dtype=np.int64)
         self.tricks_won_by = np.zeros(10, dtype=np.int64)
@@ -173,11 +167,7 @@ class raw_env(AECEnv):
             print("@step() action_card_index is empty")
         
         self.player_cards[agent_number] = cards_in_hand
-        self.cards_played[r][agent_number-1] = action+1
-
-        # TODO Check if action was allowed
-        # but assuming action masking works, unnecessary
-        # but would be good practice I guess
+        self.cards_played[r][self.current_card_index] = action+1
 
 
         # check if trick is over
@@ -185,27 +175,18 @@ class raw_env(AECEnv):
             # compute trick winner 
             trick_winner = self.trick_winner_calc() 
             self.tricks_won_by[r] = trick_winner
-            trick_points = self.trick_points_calc(self.cards_played[r])
-            self.player_points[trick_winner] += trick_points
+            trick_points = self.trick_points_calc()
+            self.player_points[trick_winner-1] += trick_points
             
-            if self.render_mode == "ansi":
-                trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1]
-                print(f'round: {r}')
-                print(f'Trick Starter: {trick_starter}')
-                print(self.render())
-                print(f'Trick Winner: {trick_winner}')
-                print(f'Trick Points: {trick_points}')
-                print("#"*30)
-            #if game is over
+            # if game is over
             # Implemented as free for all
             # TODO: Change to team vs. team game
             if r == 9:
-                players = list(self.player_points.keys())
-                values = np.array(list(self.player_points.values()))
-                max_index = np.argmax(values)
-                game_winner = players[max_index]
+                game_winner = np.argmax(self.player_points) + 1
                 self.set_game_result(game_winner)
-                print(self.player_points)
+                if self.render_mode == "ansi":
+                    print(self.render())
+                    print(self.player_points)
             
             agent_order = copy(self.possible_agents)
             # trick_winner_string = f'player{trick_winner}'
@@ -213,7 +194,9 @@ class raw_env(AECEnv):
             new_agent_order = np.concatenate((agent_order[index:], agent_order[:index]))
             self._agent_selector.reinit(new_agent_order)
             self.round += 1
+            self.current_card_index = -1 # because we increment self.current_card_index at the end of step(), so the next would be 0 
         
+        self.current_card_index += 1
         self.agent_selection = self._agent_selector.next()
         
 
@@ -244,7 +227,8 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            return str(self.cards_played[self.round])
+            render = str(self.tricks_won_by)+'\n'+str(self.cards_played)
+            return render
 
     def observation_space(self):
         observation_space = SpaceDict({
@@ -289,11 +273,10 @@ class raw_env(AECEnv):
             action_mask[cards-1] = 1
             return action_mask
         
-        # determining which cards was played first
-        # value in [1,...,20]
-        # trickstarte - 1 cuz card_played indexing
-        firstcard = self.cards_played[r][trick_starter-1] 
+        # first card played in round r
+        firstcard = self.cards_played[r][0] 
 
+        
         # if first card Trump
         if firstcard in range(1,13):
             trumps = cards[(cards <= 12)]
@@ -344,41 +327,37 @@ class raw_env(AECEnv):
         r = self.round
         trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
         trick = self.cards_played[r]
-        play_order = np.concatenate((trick[(trick_starter-1):], trick[:(trick_starter-1)]))
         # if there are trumps involved, the highest first played trump wins
-        trumps = play_order[(play_order <= 12)]
+        trumps = trick[(trick <= 12)]
         if np.any(trumps):
-            win_card_index_playorder = np.argmin(play_order)
-            trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+            win_card_in_trick = np.argmin(trick) # 0:first - 3:fourth
+            trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
             return trick_winner
         # else: no trumps involved, highest, first played, suit-matching nontrump wins
         else:
-            if play_order[0] in range(13,16):
+            if trick[0] in range(13,16):
                 nont_clubs_range = range(13,16)
-                mask = np.isin(play_order, nont_clubs_range)
+                mask = np.isin(trick, nont_clubs_range)
                 nont_clubs_indices = np.where(mask)[0]
-                win_card_index_playorder = nont_clubs_indices[np.argmin(play_order[nont_clubs_indices])] 
-                # I know that's complicated as fuck
-                # Basically we get the index of the winning card BUT in the play_order which isn't always [p1, p2, p3, p4]
+                win_card_in_trick = nont_clubs_indices[np.argmin(trick[nont_clubs_indices])] 
+                # Index of the winning card in trick
                 # So we add the difference between the trick_starter (value 1...4) and the first player (value 1)
-                # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_index_playorder=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
-                # TODO: Fix this shit, for example by making self.cards_played in right play order and infering who played what based on trick_starter
-                # maybe it doesn't make a difference but we avoid this crap
-                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_in_trick=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
+                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
-            elif play_order[0] in range(16,19):
+            elif trick[0] in range(16,19):
                 nont_spades_range = range(16,19)
-                mask = np.isin(play_order, nont_spades_range)
+                mask = np.isin(trick, nont_spades_range)
                 nont_spades_indices = np.where(mask)[0]
-                win_card_index_playorder = nont_spades_indices[np.argmin(play_order[nont_spades_indices])] 
-                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                win_card_in_trick = nont_spades_indices[np.argmin(trick[nont_spades_indices])] 
+                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
-            if play_order[0] in range(19,21):
+            if trick[0] in range(19,21):
                 nont_hearts_range = range(19,21)
-                mask = np.isin(play_order, nont_hearts_range)
+                mask = np.isin(trick, nont_hearts_range)
                 nont_hearts_indices = np.where(mask)[0]
-                win_card_index_playorder = nont_hearts_indices[np.argmin(play_order[nont_hearts_indices])] 
-                trick_winner = ((win_card_index_playorder + (trick_starter - 1)) % 4) + 1 
+                win_card_in_trick = nont_hearts_indices[np.argmin(trick[nont_hearts_indices])] 
+                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
             
             
@@ -388,9 +367,10 @@ class raw_env(AECEnv):
         return -1 
     
 
-    def trick_points_calc(self, trick):
+    def trick_points_calc(self):
         # here we see why we need doko_cards.py
         # beacuse hard_coding is disgusting
+        trick = self.cards_played[self.round]
         trick_points = 0 
         for card in trick:
             # Aces
