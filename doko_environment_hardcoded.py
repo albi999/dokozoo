@@ -4,7 +4,7 @@ from copy import copy
 import numpy as np
 from gymnasium.spaces import Discrete, MultiBinary, MultiDiscrete, Dict as SpaceDict
 import gymnasium
-from doko_cards import create_deck
+# import doko_cards.py as cards
 # from gymnasium.utils import EzPickle
 # TODO: Pickleeeee
 
@@ -115,7 +115,6 @@ class raw_env(AECEnv):
         self.round = 0 # rounds 0 ... 9
 
         # dealing cards
-        self.deck = create_deck()
         deck = np.repeat(np.arange(1,21), 2)
         random.Random(seed).shuffle(deck)
         player1_cards = deck[:10]
