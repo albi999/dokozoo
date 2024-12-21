@@ -4,7 +4,7 @@ from copy import copy
 import numpy as np
 from gymnasium.spaces import Discrete, MultiBinary, MultiDiscrete, Dict as SpaceDict
 import gymnasium
-from doko_cards import create_deck
+from doko_cards import create_unique_cards
 # from gymnasium.utils import EzPickle
 # TODO: Pickleeeee
 
@@ -18,27 +18,27 @@ from pettingzoo.utils import wrappers
 
 
 """
-i   action   card     tPower  
+i   action   card     Power   
 --------------------
-1   0        [♥10*]   12      
-2   1        [♣Q*]    11      
-3   2        [♠Q*]    10      
-4   3        [♥Q*]    9       
-5   4        [♦Q*]    8       
-6   5        [♣J*]    7       
-7   6        [♠J*]    6       
-8   7        [♥J*]    5       
-9   8        [♦J*]    4       
-10  9        [♦A*]    3       
-11  10       [♦10*]   2       
-12  11       [♦K*]    1       
-13  12       [♣A]     0       
-14  13       [♣10]    0       
+1   0        [♥10*]   20      
+2   1        [♣Q*]    19      
+3   2        [♠Q*]    18      
+4   3        [♥Q*]    17      
+5   4        [♦Q*]    16      
+6   5        [♣J*]    15      
+7   6        [♠J*]    14      
+8   7        [♥J*]    13      
+9   8        [♦J*]    12      
+10  9        [♦A*]    11      
+11  10       [♦10*]   10      
+12  11       [♦K*]    9       
+13  12       [♣A]     2       
+14  13       [♣10]    1       
 15  14       [♣K]     0       
-16  15       [♠A]     0       
-17  16       [♠10]    0       
+16  15       [♠A]     2       
+17  16       [♠10]    1       
 18  17       [♠K]     0       
-19  18       [♥A]     0       
+19  18       [♥A]     2       
 20  19       [♥K]     0       
 """
 
@@ -63,8 +63,9 @@ class raw_env(AECEnv):
         Should define the following attributes:
         - possible_agents                   ['player1', 'player2', 'player3', 'player4']
         - round                             0 ... 9 
+        - unique_cards                      [array of Card-objects] index of card-object corresponds to the action_index of playing the card
         - player_cards                      {1: player1_cards, ..., 4: player4_cards}
-        - cards_player                      [[12 1 2 3], [17 20 1 7], ...]
+        - cards_played                      [[12 1 2 3], [17 20 1 7], [3 4 0 0]...] 0 means card hasn't been played yet
         - player_points                     [player1_points, ..., player4_points]
         - team_points                       [team1_points, team2_points]
         - current_card_index                0 ... 3
@@ -79,7 +80,7 @@ class raw_env(AECEnv):
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
         self.round = None
 
-        self.deck = None 
+        self.unique_cards = None 
         self.player_cards = None
 
         self.current_card_index = None 
@@ -115,7 +116,8 @@ class raw_env(AECEnv):
         self.round = 0 # rounds 0 ... 9
 
         # dealing cards
-        self.deck = create_deck()
+        self.unique_cards = create_unique_cards()
+
         deck = np.repeat(np.arange(1,21), 2)
         random.Random(seed).shuffle(deck)
         player1_cards = deck[:10]
@@ -131,6 +133,7 @@ class raw_env(AECEnv):
 
 
         self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
+        
         # no cards played so far, no tricks won by anyone
         self.cards_played = np.zeros((10,4), dtype=np.int64)
         self.tricks_won_by = np.zeros(10, dtype=np.int64)
@@ -186,6 +189,7 @@ class raw_env(AECEnv):
             trick_points = self.trick_points_calc()
             self.player_points[trick_winner-1] += trick_points
             
+            
             # if game is over
             # Implemented as free for all
             # TODO: Change to team vs. team game
@@ -194,7 +198,7 @@ class raw_env(AECEnv):
                 self.set_game_result(game_winner)
                 if self.render_mode == "ansi":
                     print(self.render())
-                    print(self.player_points)
+                print(self.player_points)
             
             agent_order = copy(self.possible_agents)
             # trick_winner_string = f'player{trick_winner}'
@@ -203,6 +207,7 @@ class raw_env(AECEnv):
             self._agent_selector.reinit(new_agent_order)
             self.round += 1
             self.current_card_index = -1 # because we increment self.current_card_index at the end of step(), so the next would be 0 
+        
         
         self.current_card_index += 1
         self.agent_selection = self._agent_selector.next()
@@ -235,7 +240,15 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            render = str(self.tricks_won_by)+'\n'+str(self.cards_played)
+            render = f"{'Player1':<8}{'Player2':<8}{'Player3':<8}{'Player4':<8}{'Player1':<8}{'Player2':<8}{'Player3':<8}"+'\n'
+            for round in range(self.round+1):
+                for card in self.cards_played[round]:
+                    render += f"{self.unique_cards[card-1].__repr__():<8}"
+                if round==0:
+                    render += f"{'':<8}"*(4-1)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                else:
+                    render += f"{'':<8}"*(4-self.tricks_won_by[round-1])+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                render += f"{'':<8}"*(self.tricks_won_by[round]-1)
             return render
 
     def observation_space(self):
@@ -267,7 +280,8 @@ class raw_env(AECEnv):
 
         # cards the selected agent could play
         # [values between 0 and 20] 
-        # 0: nocard, 1: Hearts 10, 19: Hearts King 
+        # 0: nocard, 1: Hearts 10, 20: Hearts King 
+        # action_index = card_index-1
         cards = self.player_cards[int(self.agent_selection[6])] # player cards i --> player i
         cards = cards[(1 <= cards)] # entry of 0 means there's no cards there
         
@@ -282,12 +296,13 @@ class raw_env(AECEnv):
             return action_mask
         
         # first card played in round r
-        firstcard = self.cards_played[r][0] 
+        firstcard = self.unique_cards[self.cards_played[r][0]-1]
 
         
         # if first card Trump
-        if firstcard in range(1,13):
-            trumps = cards[(cards <= 12)]
+        if firstcard.isTrump:
+            trumps = np.array([card_index for card_index in cards if self.unique_cards[card_index-1].isTrump])
+            # trumps = cards[(cards <= 12)]
             if np.any(trumps):
                 action_mask[trumps-1] = 1 # trumps - 1 um korrespondierende action zu erhalten
                 return action_mask
@@ -296,8 +311,9 @@ class raw_env(AECEnv):
                 return action_mask
         
         # if first card non-Trump Clubs
-        elif firstcard in range(13,16):
-            nont_clubs = cards[(13 <= cards) & (cards <= 15)]
+        elif (not firstcard.isTrump) and firstcard.suit == 'C':
+            nont_clubs = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='C'])
+            # nont_clubs = cards[(13 <= cards) & (cards <= 15)]
             if np.any(nont_clubs):
                 action_mask[nont_clubs-1] = 1
                 return action_mask
@@ -306,8 +322,9 @@ class raw_env(AECEnv):
                 return action_mask
         
         # if first card non-Trump Spades
-        elif firstcard in range(16,19):
-            nont_spades = cards[(16 <= cards) & (cards <= 18)]
+        elif (not firstcard.isTrump) and firstcard.suit == 'S':
+            nont_spades = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='S'])
+            # nont_spades = cards[(16 <= cards) & (cards <= 18)]
             if np.any(nont_spades):
                 action_mask[nont_spades-1] = 1
                 return action_mask
@@ -316,8 +333,9 @@ class raw_env(AECEnv):
                 return action_mask
             
         # if first card non-Trump Hearts
-        elif firstcard in range(19,21):
-            nont_hearts = cards[(19 <= cards)]
+        elif (not firstcard.isTrump) and firstcard.suit == 'H':
+            nont_hearts = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='H'])
+            # nont_hearts = cards[(19 <= cards)]
             if np.any(nont_hearts):
                 action_mask[nont_hearts-1] = 1
                 return action_mask 
@@ -325,6 +343,16 @@ class raw_env(AECEnv):
                 action_mask[cards-1] = 1
                 return action_mask
 
+         # if first card non-Trump Diamonds 
+         # only relevant later in solos
+        elif (not firstcard.isTrump) and firstcard.suit == 'H':
+            nont_diamonds = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='D'])
+            if np.any(nont_diamonds):
+                action_mask[nont_diamonds-1] = 1
+                return action_mask 
+            else:
+                action_mask[cards-1] = 1
+                return action_mask
         print("Something went wrong and your code fucking sucks")
         print("We're at the end of action_mask_calc()")  
         return action_mask
@@ -336,38 +364,51 @@ class raw_env(AECEnv):
         trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
         trick = self.cards_played[r]
         # if there are trumps involved, the highest first played trump wins
-        trumps = trick[(trick <= 12)]
-        if np.any(trumps):
-            win_card_in_trick = np.argmin(trick) # 0:first - 3:fourth
+        card_powers = np.array([self.unique_cards[card_index-1].power for card_index in trick]) # powers for all cards in trick
+        
+        # computing sum seems to perform better than np.any
+        # and allows us to differentiate with power alone between tricks with trumps and without
+        # highest power of non-trump is 2. So a non-trump trick has max. 2*4=8 power
+        # if it's higher -> there's a trump in there
+        if np.sum(card_powers)>8:
+            win_card_in_trick = np.argmax(card_powers) # 0:first - 3:fourth
             trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
             return trick_winner
+        
         # else: no trumps involved, highest, first played, suit-matching nontrump wins
         else:
-            if trick[0] in range(13,16):
-                nont_clubs_range = range(13,16)
-                mask = np.isin(trick, nont_clubs_range)
-                nont_clubs_indices = np.where(mask)[0]
-                win_card_in_trick = nont_clubs_indices[np.argmin(trick[nont_clubs_indices])] 
+
+            # first card is non_trump clubs
+            if self.unique_cards[trick[0]-1].suit == 'C':
+
+                # getting mask for trick: True if Clubscard else False
+                # getting indices of trick where mask is True
+                # getting index of max in masked card_powers
+                # getting index of max in trick_array
+                nont_clubs_mask = np.array([self.unique_cards[x-1].suit == 'C' for x in trick])
+                nont_clubs_indices = np.where(nont_clubs_mask)[0]
+                win_card_in_trick = nont_clubs_indices[np.argmax(card_powers[nont_clubs_mask])]
+
                 # Index of the winning card in trick
                 # So we add the difference between the trick_starter (value 1...4) and the first player (value 1)
                 # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_in_trick=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
                 trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
-            elif trick[0] in range(16,19):
-                nont_spades_range = range(16,19)
-                mask = np.isin(trick, nont_spades_range)
-                nont_spades_indices = np.where(mask)[0]
-                win_card_in_trick = nont_spades_indices[np.argmin(trick[nont_spades_indices])] 
+            # first card is non_trump spades
+            elif self.unique_cards[trick[0]-1].suit == 'S':
+                nont_spades_mask = np.array([self.unique_cards[x-1].suit == 'S' for x in trick])
+                nont_spades_indices = np.where(nont_spades_mask)[0]
+                win_card_in_trick = nont_spades_indices[np.argmax(card_powers[nont_spades_mask])]
+                
                 trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
-            if trick[0] in range(19,21):
-                nont_hearts_range = range(19,21)
-                mask = np.isin(trick, nont_hearts_range)
-                nont_hearts_indices = np.where(mask)[0]
-                win_card_in_trick = nont_hearts_indices[np.argmin(trick[nont_hearts_indices])] 
+            if self.unique_cards[trick[0]-1].suit == 'H':
+                nont_hearts_mask = np.array([self.unique_cards[x-1].suit == 'H' for x in trick])
+                nont_hearts_indices = np.where(nont_hearts_mask)[0]
+                win_card_in_trick = nont_hearts_indices[np.argmax(card_powers[nont_hearts_mask])]
                 trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
                 return trick_winner
-            
+            # TODO add nontrump diamonds for solos 
             
         
         print("Something went wrong and your code fucking sucks")
@@ -376,21 +417,20 @@ class raw_env(AECEnv):
     
 
     def trick_points_calc(self):
-        # here we see why we need doko_cards.py
-        # beacuse hard_coding is disgusting
         trick = self.cards_played[self.round]
         trick_points = 0 
-        for card in trick:
+        for action_index in trick:
+            card = self.unique_cards[action_index-1]
             # Aces
-            if card in (10,13,16,19):
+            if card.rank == 'A':
                 trick_points += 11
-            elif card in (1,11,14,17):
+            elif card.rank == '10':
                 trick_points += 10
-            elif card in (12,15,18,20):
+            elif card.rank == 'K':
                 trick_points += 4
-            elif card in (2,3,4,5):
+            elif card.rank == 'Q':
                 trick_points += 3
-            elif card in (6,7,8,9):
+            elif card.rank == 'J':
                 trick_points += 2
         
         return trick_points

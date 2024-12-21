@@ -3,7 +3,7 @@ SUITS = ['C', 'S', 'H', 'D']
 RANKS = ['Q', 'J', 'A', '10', 'K']
 
 class Card:
-    def __init__(self, suit, rank, isTrump, tPower):
+    def __init__(self, suit, rank, isTrump, power):
         if suit not in SUITS:
             raise ValueError(f"Invalid suit: {suit}")
         if rank not in RANKS:
@@ -12,7 +12,7 @@ class Card:
         self._suit = suit
         self._rank = rank
         self._isTrump = isTrump
-        self._tPower = tPower
+        self._power = power
 
 
     @property
@@ -25,16 +25,17 @@ class Card:
     def isTrump(self):
         return self._isTrump
     @property
-    def tPower(self):
-        return self._tPower
+    def power(self):
+        return self._power
+    
 
     @isTrump.setter
     def isTrump(self, new_isTrump):
         self._isTrump = new_isTrump
     
-    @tPower.setter
-    def tPower(self, new_tPower):
-        self._tPower = new_tPower
+    @power.setter
+    def power(self, new_power):
+        self._power = new_power
         
     def __repr__(self):
         # match case would have been prettier but this is python 3.9 
@@ -52,32 +53,32 @@ class Card:
         return f"[{s}{self.rank}{'*' if self.isTrump else ''}]"
     
 
-def create_deck():
+def create_unique_cards():
     deck = []
     # trump cards
-    tPowc = 12 # trump power counter
-    deck.append(Card('H', '10', True, tPowc))
-    deck.append(Card('H', '10', True, tPowc))
-    tPowc -= 1
+    powC = 20 # power counter
+    deck.append(Card('H', '10', True, powC))
+    powC -= 1
     for r in ['Q', 'J']:
         for s in SUITS:
-            deck.append(Card(s, r, True, tPowc))
-            deck.append(Card(s, r, True, tPowc))
-            tPowc -= 1
+            deck.append(Card(s, r, True, powC))
+            powC -= 1
     for r in ['A', '10', 'K']:
-        deck.append(Card('D', r, True, tPowc))
-        deck.append(Card('D', r, True, tPowc))
-        tPowc -= 1
-
+        deck.append(Card('D', r, True, powC))
+        powC -= 1
+    
+    powC = 2
     # non-Trump cards
     for r in ['A', '10', 'K']:
-        deck.append(Card('C', r, False, tPowc))
-        deck.append(Card('C', r, False, tPowc))
+        deck.append(Card('C', r, False, powC))
+        powC -= 1
+    powC = 2
     for r in ['A', '10', 'K']:
-        deck.append(Card('S', r, False, tPowc))
-        deck.append(Card('S', r, False, tPowc))
+        deck.append(Card('S', r, False, powC))
+        powC -= 1
+    powC = 2
     for r in ['A', 'K']:
-        deck.append(Card('H', r, False, tPowc))
-        deck.append(Card('H', r, False, tPowc))
+        deck.append(Card('H', r, False, powC))
+        powC -= 2
                  
     return deck
