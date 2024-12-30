@@ -2,7 +2,7 @@ import doko_environment
 import numpy as np
 
 env = doko_environment.env(render_mode="ansi")
-env.reset(seed=2)
+env.reset(seed=42)
 
 for agent in env.agent_iter():
     observation, reward, termination, truncation, info = env.last()

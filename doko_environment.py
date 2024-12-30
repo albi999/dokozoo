@@ -66,7 +66,7 @@ class raw_env(AECEnv):
         - unique_cards                      [array of Card-objects] index of card-object corresponds to the action_index of playing the card
         - player_cards                      {1: player1_cards, ..., 4: player4_cards}
         - cards_played                      [[12 1 2 3], [17 20 1 7], [3 4 0 0]...] 0 means card hasn't been played yet
-        - player_points                     [player1_points, ..., player4_points]
+        - player_trick_points               [player1_points, ..., player4_points]
         - team_points                       [team1_points, team2_points]
         - current_card_index                0 ... 3
         - tricks_won_by                     [3 1 3 4 0 0 0 0 0 0]: player3 won first trick, player1 won second trick, ..., playing fifth trick atm
@@ -78,6 +78,7 @@ class raw_env(AECEnv):
         """
 
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
+        self.seating_order = None
         self.round = None
 
         self.unique_cards = None 
@@ -88,7 +89,7 @@ class raw_env(AECEnv):
         self.cards_played = None
         self.tricks_won_by = None
 
-        self.player_points = None
+        self.player_trick_points = None
         self.team_points = None
 
         # agent selection attributes
@@ -138,15 +139,17 @@ class raw_env(AECEnv):
         self.cards_played = np.zeros((10,4), dtype=np.int64)
         self.tricks_won_by = np.zeros(10, dtype=np.int64)
        
-        self.player_points = np.zeros(4, dtype=np.int64)
+        self.player_trick_points = np.zeros(4, dtype=np.int64)
         self.team_points = np.zeros(2, dtype=np.int64)
 
 
         
         
-
-        # TODO should be random who starts
-        self._agent_selector = agent_selector(self.agents)
+        # random seating order
+        self.seating_order = copy(self.agents)
+        random.shuffle(self.seating_order)
+        
+        self._agent_selector = agent_selector(self.seating_order)
         self.agent_selection = self._agent_selector.reset()
         self.starter = int(self.agent_selection[6]) # starter between 1 and 4
 
@@ -166,6 +169,10 @@ class raw_env(AECEnv):
         ):
             return self._was_dead_step(action)
         
+        if self.render_mode == "ansi":
+            print(self.render2(action))
+
+
         r = self.round
         agent = self.agent_selection
         agent_number = int(agent[6])
@@ -180,6 +187,7 @@ class raw_env(AECEnv):
         self.player_cards[agent_number] = cards_in_hand
         self.cards_played[r][self.current_card_index] = action+1
 
+        
 
         # check if trick is over
         if self._agent_selector.is_last():
@@ -187,18 +195,18 @@ class raw_env(AECEnv):
             trick_winner = self.trick_winner_calc() 
             self.tricks_won_by[r] = trick_winner
             trick_points = self.trick_points_calc()
-            self.player_points[trick_winner-1] += trick_points
+            self.player_trick_points[trick_winner-1] += trick_points
             
             
             # if game is over
             # Implemented as free for all
             # TODO: Change to team vs. team game
             if r == 9:
-                game_winner = np.argmax(self.player_points) + 1
+                game_winner = np.argmax(self.player_trick_points) + 1
                 self.set_game_result(game_winner)
                 if self.render_mode == "ansi":
                     print(self.render())
-                print(self.player_points)
+                print(self.player_trick_points)
             
             agent_order = copy(self.possible_agents)
             # trick_winner_string = f'player{trick_winner}'
@@ -208,7 +216,8 @@ class raw_env(AECEnv):
             self.round += 1
             self.current_card_index = -1 # because we increment self.current_card_index at the end of step(), so the next would be 0 
         
-        
+            
+
         self.current_card_index += 1
         self.agent_selection = self._agent_selector.next()
         
@@ -228,6 +237,7 @@ class raw_env(AECEnv):
             "cards_in_hand": self.player_cards[player_number], 
             "cards_played": self.cards_played,
             "tricks_won_by": self.tricks_won_by,
+            "player_trick_points": self.player_trick_points,
             "action_mask": action_mask
         }
 
@@ -240,7 +250,8 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            render = f"{'Player1':<8}{'Player2':<8}{'Player3':<8}{'Player4':<8}{'Player1':<8}{'Player2':<8}{'Player3':<8}"+'\n'
+            so = self.seating_order # so = seating order
+            render = f"{so[0]:<8}{so[1]:<8}{so[2]:<8}{so[3]:<8}{so[0]:<8}{so[1]:<8}{so[2]:<8}"+'\n'
             for round in range(self.round+1):
                 for card in self.cards_played[round]:
                     render += f"{self.unique_cards[card-1].__repr__():<8}"
@@ -250,6 +261,35 @@ class raw_env(AECEnv):
                     render += f"{'':<8}"*(4-self.tricks_won_by[round-1])+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
                 render += f"{'':<8}"*(self.tricks_won_by[round]-1)
             return render
+        
+    def render2(self, action):
+        if self.render_mode is None:
+            gymnasium.logger.warn(
+                "You are calling render method without specifying any render mode."
+            )
+        elif self.render_mode == "ansi":
+            render = "#"*40 + '\n'
+            render += f"{'Round':<20}: {self.round}" + '\n'
+            render += f"{'Player trick points':<20}: {self.player_trick_points}" + '\n'
+            render += f"{'Player to play':<20}: {self.agent_selection}" + '\n'
+
+            render += f"{'Current trick':<20}: "
+            for card in self.cards_played[self.round]:
+                if card != 0:
+                    render += f"{self.unique_cards[card-1].__repr__():<6}"
+            render += '\n'
+
+            render += f"{'Cards in hand':<20}: "
+            for card in self.player_cards[int(self.agent_selection[6])]:
+                if card != 0:
+                    render += f"{self.unique_cards[card-1].__repr__():<6}"
+            render += '\n'
+            
+            render += f"{'action':<20}: {self.unique_cards[action].__repr__():<6}" + '\n'
+            render += "#"*40 + '\n'
+
+
+            return render
 
     def observation_space(self):
         observation_space = SpaceDict({
@@ -257,6 +297,7 @@ class raw_env(AECEnv):
             "cards_in_hand": MultiDiscrete(10 * [21]),
             "cards_played": MultiDiscrete(10 * [4 * [21]]),
             "tricks_won_by": MultiDiscrete(10 * [5]),
+            "player_trick_points": MultiDiscrete(4*[240]),
             "action_mask": MultiBinary(20)
         })
         return observation_space
