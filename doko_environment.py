@@ -145,11 +145,12 @@ class raw_env(AECEnv):
 
         
         
-        # random seating order
-        self.seating_order = copy(self.agents)
-        random.shuffle(self.seating_order)
+        # random starter
+        rand4 = random.randrange(4)
+        random_agent_order = np.roll(copy(self.agents), rand4)
         
-        self._agent_selector = agent_selector(self.seating_order)
+        
+        self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
         self.starter = int(self.agent_selection[6]) # starter between 1 and 4
 
@@ -250,16 +251,21 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            so = self.seating_order # so = seating order
-            render = f"{so[0]:<8}{so[1]:<8}{so[2]:<8}{so[3]:<8}{so[0]:<8}{so[1]:<8}{so[2]:<8}"+'\n'
+            game_starter = self.starter
+            render = ""
+
+            for i in range(7):
+                render += f"Player{((game_starter+i-1) % 4) + 1} "
+            render += '\n'
+
             for round in range(self.round+1):
                 for card in self.cards_played[round]:
                     render += f"{self.unique_cards[card-1].__repr__():<8}"
                 if round==0:
-                    render += f"{'':<8}"*(4-1)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                    render += f"{'':<8}"*(3)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
                 else:
-                    render += f"{'':<8}"*(4-self.tricks_won_by[round-1])+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
-                render += f"{'':<8}"*(self.tricks_won_by[round]-1)
+                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1)%4)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter)%4)
             return render
         
     def render2(self, action):
@@ -268,7 +274,7 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            render = "#"*40 + '\n'
+            render = "#"*80 + '\n'
             render += f"{'Round':<20}: {self.round}" + '\n'
             render += f"{'Player trick points':<20}: {self.player_trick_points}" + '\n'
             render += f"{'Player to play':<20}: {self.agent_selection}" + '\n'
@@ -276,17 +282,17 @@ class raw_env(AECEnv):
             render += f"{'Current trick':<20}: "
             for card in self.cards_played[self.round]:
                 if card != 0:
-                    render += f"{self.unique_cards[card-1].__repr__():<6}"
+                    render += f"{self.unique_cards[card-1].__repr__()} "
             render += '\n'
 
             render += f"{'Cards in hand':<20}: "
             for card in self.player_cards[int(self.agent_selection[6])]:
                 if card != 0:
-                    render += f"{self.unique_cards[card-1].__repr__():<6}"
+                    render += f"{self.unique_cards[card-1].__repr__()} "
             render += '\n'
             
-            render += f"{'action':<20}: {self.unique_cards[action].__repr__():<6}" + '\n'
-            render += "#"*40 + '\n'
+            render += f"{'action':<20}: {self.unique_cards[action].__repr__()} " + '\n'
+            render += "#"*80
 
 
             return render
@@ -352,7 +358,7 @@ class raw_env(AECEnv):
                 return action_mask
         
         # if first card non-Trump Clubs
-        elif (not firstcard.isTrump) and firstcard.suit == 'C':
+        elif firstcard.suit == 'C':
             nont_clubs = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='C'])
             # nont_clubs = cards[(13 <= cards) & (cards <= 15)]
             if np.any(nont_clubs):
@@ -363,7 +369,7 @@ class raw_env(AECEnv):
                 return action_mask
         
         # if first card non-Trump Spades
-        elif (not firstcard.isTrump) and firstcard.suit == 'S':
+        elif firstcard.suit == 'S':
             nont_spades = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='S'])
             # nont_spades = cards[(16 <= cards) & (cards <= 18)]
             if np.any(nont_spades):
@@ -374,7 +380,7 @@ class raw_env(AECEnv):
                 return action_mask
             
         # if first card non-Trump Hearts
-        elif (not firstcard.isTrump) and firstcard.suit == 'H':
+        elif firstcard.suit == 'H':
             nont_hearts = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='H'])
             # nont_hearts = cards[(19 <= cards)]
             if np.any(nont_hearts):
@@ -386,7 +392,7 @@ class raw_env(AECEnv):
 
          # if first card non-Trump Diamonds 
          # only relevant later in solos
-        elif (not firstcard.isTrump) and firstcard.suit == 'H':
+        elif firstcard.suit == 'H':
             nont_diamonds = np.array([card_index for card_index in cards if (not self.unique_cards[card_index-1].isTrump) and self.unique_cards[card_index-1].suit=='D'])
             if np.any(nont_diamonds):
                 action_mask[nont_diamonds-1] = 1
@@ -413,7 +419,7 @@ class raw_env(AECEnv):
         # if it's higher -> there's a trump in there
         if np.sum(card_powers)>8:
             win_card_in_trick = np.argmax(card_powers) # 0:first - 3:fourth
-            trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
+            trick_winner = ((win_card_in_trick + trick_starter - 1) % 4) + 1
             return trick_winner
         
         # else: no trumps involved, highest, first played, suit-matching nontrump wins
@@ -431,9 +437,9 @@ class raw_env(AECEnv):
                 win_card_in_trick = nont_clubs_indices[np.argmax(card_powers[nont_clubs_mask])]
 
                 # Index of the winning card in trick
-                # So we add the difference between the trick_starter (value 1...4) and the first player (value 1)
+                # So we add the difference between the trick_starter (value 1...4) and the first player self.starter seated 
                 # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_in_trick=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
-                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
+                trick_winner = ((win_card_in_trick + trick_starter - 1) % 4) + 1
                 return trick_winner
             # first card is non_trump spades
             elif self.unique_cards[trick[0]-1].suit == 'S':
@@ -441,13 +447,13 @@ class raw_env(AECEnv):
                 nont_spades_indices = np.where(nont_spades_mask)[0]
                 win_card_in_trick = nont_spades_indices[np.argmax(card_powers[nont_spades_mask])]
                 
-                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
+                trick_winner = ((win_card_in_trick + trick_starter - 1) % 4) + 1
                 return trick_winner
             if self.unique_cards[trick[0]-1].suit == 'H':
                 nont_hearts_mask = np.array([self.unique_cards[x-1].suit == 'H' for x in trick])
                 nont_hearts_indices = np.where(nont_hearts_mask)[0]
                 win_card_in_trick = nont_hearts_indices[np.argmax(card_powers[nont_hearts_mask])]
-                trick_winner = ((win_card_in_trick + (trick_starter - 1)) % 4) + 1 
+                trick_winner = ((win_card_in_trick + trick_starter - 1) % 4) + 1
                 return trick_winner
             # TODO add nontrump diamonds for solos 
             
