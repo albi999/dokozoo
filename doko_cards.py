@@ -50,7 +50,7 @@ class Card:
         elif self.suit == 'D':
             s = '♦'
 
-        return f"[{s}{self.rank}{'*' if self.isTrump else ''}]"
+        return f"[{s} {self.rank}{'*' if self.isTrump else ''}]"
     
 
 def create_unique_cards():

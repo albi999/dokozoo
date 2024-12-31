@@ -274,28 +274,33 @@ class raw_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
-            render = "#"*80 + '\n'
-            render += f"{'Round':<20}: {self.round}" + '\n'
-            render += f"{'Player trick points':<20}: {self.player_trick_points}" + '\n'
-            render += f"{'Player to play':<20}: {self.agent_selection}" + '\n'
-
-            render += f"{'Current trick':<20}: "
+            width = 95
+            render = '╔' + '═'*(width+1) + '╗' + '\n'
+            render += self.format_line(f"{'Player to play':<20}: {self.agent_selection}", width) + '\n'
+            render += self.format_line(f"{'Round':<20}: {self.round}", width) + '\n'
+            render += self.format_line(f"{'Player trick points':<20}: {self.player_trick_points}", width) + '\n'
+            
+            cur_trick_string = f"{'Current trick':<20}: "
             for card in self.cards_played[self.round]:
                 if card != 0:
-                    render += f"{self.unique_cards[card-1].__repr__()} "
-            render += '\n'
+                    cur_trick_string += f"{self.unique_cards[card-1].__repr__()} "
+            render += self.format_line(cur_trick_string, width) + '\n'
 
-            render += f"{'Cards in hand':<20}: "
+            cardsinhand_string = f"{'Cards in hand':<20}: "
             for card in self.player_cards[int(self.agent_selection[6])]:
                 if card != 0:
-                    render += f"{self.unique_cards[card-1].__repr__()} "
-            render += '\n'
+                    cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
+            render += self.format_line(cardsinhand_string, width) + '\n'
             
-            render += f"{'action':<20}: {self.unique_cards[action].__repr__()} " + '\n'
-            render += "#"*80
+            render += self.format_line(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
+            render += '╚' + '═'*(width+1) + '╝'
 
 
             return render
+        
+    def format_line(self, content, width=100):
+        padding = width - len(content)
+        return f"║ {content}{' ' * padding}║"
 
     def observation_space(self):
         observation_space = SpaceDict({
