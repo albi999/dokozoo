@@ -64,10 +64,10 @@ class raw_env(AECEnv):
         - possible_agents                   ['player1', 'player2', 'player3', 'player4']
         - round                             0 ... 9 
         - unique_cards                      [array of Card-objects] index of card-object corresponds to the action_index of playing the card
-        - player_cards                      {1: player1_cards, ..., 4: player4_cards}
+        - player_cards                      [player1_cards, ..., player4_cards]
         - cards_played                      [[12 1 2 3], [17 20 1 7], [3 4 0 0]...] 0 means card hasn't been played yet
         - player_trick_points               [player1_points, ..., player4_points]
-        - team_points                       [team1_points, team2_points]
+        - team_trick_points                       [team1_points, team2_points]
         - current_card_index                0 ... 3
         - tricks_won_by                     [3 1 3 4 0 0 0 0 0 0]: player3 won first trick, player1 won second trick, ..., playing fifth trick atm
         - agent_selection                   'player1', ..., 'player4'
@@ -78,19 +78,18 @@ class raw_env(AECEnv):
         """
 
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
-        self.seating_order = None
-        self.round = None
-
         self.unique_cards = None 
         self.player_cards = None
+        self.reh = None
+        self.kontra = None
 
+        self.round = None
         self.current_card_index = None 
-
         self.cards_played = None
         self.tricks_won_by = None
 
         self.player_trick_points = None
-        self.team_points = None
+        self.team_trick_points = None
 
         # agent selection attributes
         self.agent_selection = None
@@ -114,11 +113,9 @@ class raw_env(AECEnv):
         """
 
         self.agents = copy(self.possible_agents)
-        self.round = 0 # rounds 0 ... 9
-
-        # dealing cards
         self.unique_cards = create_unique_cards()
 
+        # dealing cards
         deck = np.repeat(np.arange(1,21), 2)
         random.Random(seed).shuffle(deck)
         player1_cards = deck[:10]
@@ -126,23 +123,58 @@ class raw_env(AECEnv):
         player3_cards = deck[20:30]
         player4_cards = deck[30:40]
         # TODO shuffle until both clubs queens are not on one hand
-        # TODO this could be an array but would require reindexing a whole lotta shit, I should still do it tho
-        self.player_cards = {
-            1: player1_cards,
-            2: player2_cards,
-            3: player3_cards,
-            4: player4_cards
-        }
+        self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
 
 
-        self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
+        self.print_player_cards()
+
+        reshuffles = 0
+        while True:
+            valid_game = True
+            for cards in self.player_cards:
+                if len(np.where(cards == 2)[0]) == 2:
+                    valid_game = False
+            
+            if not valid_game:
+                # dealing cards
+                reshuffles += 1
+                print(f"#reshuffles = {reshuffles}")
+
+                deck = np.repeat(np.arange(1,21), 2)
+                random.Random(seed+reshuffles).shuffle(deck)
+                player1_cards = deck[:10]
+                player2_cards = deck[10:20]
+                player3_cards = deck[20:30]
+                player4_cards = deck[30:40]
+                self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
+
+                self.print_player_cards()
+            
+            else:
+                break
+
         
-        # no cards played so far, no tricks won by anyone
-        self.cards_played = np.zeros((10,4), dtype=np.int64)
-        self.tricks_won_by = np.zeros(10, dtype=np.int64)
+
+       
+
+        self.reh = np.zeros(4, dtype=np.int64)
+        self.kontra = np.zeros(4, dtype=np.int64)
+
+        # TODO later with solos this declaration has to be happen during the game
+        # because that's only decided after the first actions
+        for i in range(4):
+            if 2 in self.player_cards[i]:
+                self.reh[i] = 1
+            else:
+                self.kontra[i] = 1
+
+        self.round = 0 # rounds 0 ... 9
+        self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
+        self.cards_played = np.zeros((10,4), dtype=np.int64)  # no cards played so far
+        self.tricks_won_by = np.zeros(10, dtype=np.int64) # no tricks won by anyone
        
         self.player_trick_points = np.zeros(4, dtype=np.int64)
-        self.team_points = np.zeros(2, dtype=np.int64)
+        self.team_trick_points = np.zeros(2, dtype=np.int64)
 
 
         
@@ -177,7 +209,7 @@ class raw_env(AECEnv):
         r = self.round
         agent = self.agent_selection
         agent_number = int(agent[6])
-        cards_in_hand = self.player_cards[agent_number]
+        cards_in_hand = self.player_cards[agent_number-1]
         action_card_indices = np.where(cards_in_hand == action+1)[0]
         if action_card_indices.size > 0:
             cards_in_hand[action_card_indices[0]] = 0
@@ -185,7 +217,7 @@ class raw_env(AECEnv):
             print("Something went wrong and your code fucking sucks")
             print("@step() action_card_index is empty")
         
-        self.player_cards[agent_number] = cards_in_hand
+        self.player_cards[agent_number-1] = cards_in_hand
         self.cards_played[r][self.current_card_index] = action+1
 
         
@@ -197,17 +229,23 @@ class raw_env(AECEnv):
             self.tricks_won_by[r] = trick_winner
             trick_points = self.trick_points_calc()
             self.player_trick_points[trick_winner-1] += trick_points
-            
+            if self.reh[trick_winner-1]:
+                self.team_trick_points[0] += trick_points
+            else:
+                self.team_trick_points[1] += trick_points
             
             # if game is over
-            # Implemented as free for all
-            # TODO: Change to team vs. team game
             if r == 9:
-                game_winner = np.argmax(self.player_trick_points) + 1
-                self.set_game_result(game_winner)
+                winning_team = 2 # impossible value
+                # TODO np.argmax(self.team_trick_points) not entirely correct
+                # has to change when adding calls
+                if self.team_trick_points[1]==120:
+                    winning_team = 1
+                else:
+                    winning_team = np.argmax(self.team_trick_points)
+                self.set_game_result(winning_team)
                 if self.render_mode == "ansi":
-                    print("\n".join(self.render2()))
-                print(self.player_trick_points)
+                    print("\n".join(self.render_played_cards()))
             
             agent_order = copy(self.possible_agents)
             # trick_winner_string = f'player{trick_winner}'
@@ -235,7 +273,7 @@ class raw_env(AECEnv):
         player_number = int(self.agent_selection[6])
         observation = {
             "round": self.round,
-            "cards_in_hand": self.player_cards[player_number], 
+            "cards_in_hand": self.player_cards[player_number-1], 
             "cards_played": self.cards_played,
             "tricks_won_by": self.tricks_won_by,
             "player_trick_points": self.player_trick_points,
@@ -245,7 +283,7 @@ class raw_env(AECEnv):
 
         return observation
 
-    def render2(self):
+    def render_played_cards(self):
         if self.render_mode is None:
             gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode."
@@ -323,7 +361,7 @@ class raw_env(AECEnv):
             render += '╔' + '═'*(width+1) + '╗' + '\n'
 
             
-            game_so_far = self.render2()
+            game_so_far = self.render_played_cards()
             for row in game_so_far:
                 render += self.fline_oneblock(row, width) + '\n'
 
@@ -339,7 +377,7 @@ class raw_env(AECEnv):
             render += self.fline_oneblock(cur_trick_string, width) + '\n'
 
             cardsinhand_string = f"{'Cards in hand':<20}: "
-            for card in self.player_cards[int(self.agent_selection[6])]:
+            for card in self.player_cards[int(self.agent_selection[6])-1]:
                 if card != 0:
                     cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
             render += self.fline_oneblock(cardsinhand_string, width) + '\n'
@@ -386,6 +424,17 @@ class raw_env(AECEnv):
 
         return grid
 
+    def print_player_cards(self):
+        print('═'*80)
+        for i, cards in enumerate(self.player_cards):
+            hand = ""
+            for card in cards:
+                if card != 0:
+                    hand += f"{self.unique_cards[card-1].__repr__()}"
+
+            print(f"Player{i+1}: [{hand}]" + '\n')
+        print('═'*80)
+        
 
     def observation_space(self):
         observation_space = SpaceDict({
@@ -404,10 +453,46 @@ class raw_env(AECEnv):
         return Discrete(20) 
     
 
-    def set_game_result(self, game_winner):
+    def set_game_result(self, winning_team):
+        winning_players_indices = None
+        winning_trick_points = self.team_trick_points[winning_team]
+        game_points = 1
+
+        # winning_team=0 means 'Reh' won
+        if winning_team==0:
+            winning_players_indices = np.where(self.reh == 1)[0]
+
+            if winning_trick_points>150:
+                game_points += 1
+            if winning_trick_points>180:
+                game_points += 1
+            if winning_trick_points>210:
+                game_points += 1
+            if winning_trick_points==240:
+                game_points += 1
+
+
+        else:
+            winning_players_indices = np.where(self.kontra == 1)[0]
+            game_points += 1 # against the Olds point "Gegen die Alten"
+
+            if winning_trick_points>150:
+                game_points += 1
+            if winning_trick_points>180:
+                game_points += 1
+            if winning_trick_points>210:
+                game_points += 1
+            if winning_trick_points==240:
+                game_points += 1
+
+        print(self.player_trick_points)
+        print(self.team_trick_points)
+        print(f"WINNING TEAM INDEX {winning_team}:  {'REH' if not winning_team else 'KONTRA'}")
+        print(f"WINNING PLAYER INDICES:  {winning_players_indices}")
         for i, name in enumerate(self.agents):
             self.terminations[name] = True
-            self.rewards[name] = 3 if name == f'player{game_winner}' else -1
+            self.rewards[name] = game_points if i in winning_players_indices else -game_points
+            print(f"player_i: {i} | {name} | reward {self.rewards[name]}")
             self.infos[name] = {"legal_moves": []}
 
 
@@ -419,7 +504,7 @@ class raw_env(AECEnv):
         # [values between 0 and 20] 
         # 0: nocard, 1: Hearts 10, 20: Hearts King 
         # action_index = card_index-1
-        cards = self.player_cards[int(self.agent_selection[6])] # player cards i --> player i
+        cards = self.player_cards[int(self.agent_selection[6])-1] # player cards i --> player i
         cards = cards[(1 <= cards)] # entry of 0 means there's no cards there
         
         # getting round and trick starter
