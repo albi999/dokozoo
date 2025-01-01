@@ -125,6 +125,8 @@ class raw_env(AECEnv):
         player2_cards = deck[10:20]
         player3_cards = deck[20:30]
         player4_cards = deck[30:40]
+        # TODO shuffle until both clubs queens are not on one hand
+        # TODO this could be an array but would require reindexing a whole lotta shit, I should still do it tho
         self.player_cards = {
             1: player1_cards,
             2: player2_cards,
@@ -145,11 +147,9 @@ class raw_env(AECEnv):
 
         
         
-        # random starter
+        # random starter but still that 1 comes after 4, 2 after 1, 3 after 2, 4 after 3
         rand4 = random.randrange(4)
         random_agent_order = np.roll(copy(self.agents), rand4)
-        
-        
         self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
         self.starter = int(self.agent_selection[6]) # starter between 1 and 4
@@ -171,7 +171,7 @@ class raw_env(AECEnv):
             return self._was_dead_step(action)
         
         if self.render_mode == "ansi":
-            print(self.render2(action))
+            print(self.render(action))
 
 
         r = self.round
@@ -206,7 +206,7 @@ class raw_env(AECEnv):
                 game_winner = np.argmax(self.player_trick_points) + 1
                 self.set_game_result(game_winner)
                 if self.render_mode == "ansi":
-                    print(self.render())
+                    print("\n".join(self.render2()))
                 print(self.player_trick_points)
             
             agent_order = copy(self.possible_agents)
@@ -245,62 +245,147 @@ class raw_env(AECEnv):
 
         return observation
 
-    def render(self):
+    def render2(self):
         if self.render_mode is None:
             gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
+            '''
             game_starter = self.starter
             render = ""
 
             for i in range(7):
                 render += f"Player{((game_starter+i-1) % 4) + 1} "
-            render += '\n'
+            render += f"{'Winner':<8}" + '\n'
 
             for round in range(self.round+1):
                 for card in self.cards_played[round]:
                     render += f"{self.unique_cards[card-1].__repr__():<8}"
                 if round==0:
-                    render += f"{'':<8}"*(3)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                    render += f"{'':<8}"*(3)+f"[{self.tricks_won_by[round]}]" + '\n'
                 else:
-                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1)%4)+f"[Winner: {self.tricks_won_by[round]}]" + '\n'
+                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1) % 4)+f"[{self.tricks_won_by[round]}]" + '\n'
                 render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter)%4)
             return render
+            '''
+            game_starter = self.starter
+            twb = self.tricks_won_by
+
+            gridcontent = []
+
+            gridrow = []
+            for i in range(7):
+                gridrow.append(f"Player{((game_starter+i-1) % 4) + 1} ")
+            gridrow.append(f"{'Winner':<8}" )
+            gridcontent.append(gridrow)
+
+            gridrow = []
+            for round in range(self.round+1):
+                for card in self.cards_played[round]:
+                    if card == 0:
+                        gridrow.append("[▒▒▒]")
+                    else:
+                        gridrow.append(f"{self.unique_cards[card-1].__repr__():<8}")
+                if round==0:
+                    for i in range(3):
+                        gridrow.append("")
+                else:
+                    for i in range(((game_starter - twb[round-1] - 1) % 4)):
+                        gridrow.append("")
+
+                if twb[round] == 0:
+                    gridrow.append("[▒▒▒]")
+                else:
+                    gridrow.append(f"[{twb[round]}]")  
+
+                gridcontent.append(gridrow)
+
+                gridrow = []
+
+                for i in range(((twb[round] - game_starter) % 4)):
+                    gridrow.append("")
+            
+            render = self.draw_dynamic_grid_with_content(self.round+2, 8, gridcontent, 8, 1)
+            return render
         
-    def render2(self, action):
+    def render(self, action):
         if self.render_mode is None:
             gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode."
             )
         elif self.render_mode == "ansi":
             width = 95
-            render = '╔' + '═'*(width+1) + '╗' + '\n'
-            render += self.format_line(f"{'Player to play':<20}: {self.agent_selection}", width) + '\n'
-            render += self.format_line(f"{'Round':<20}: {self.round}", width) + '\n'
-            render += self.format_line(f"{'Player trick points':<20}: {self.player_trick_points}", width) + '\n'
+            render = ""
+
+            r = self.round
+
+            render += '╔' + '═'*(width+1) + '╗' + '\n'
+
+            
+            game_so_far = self.render2()
+            for row in game_so_far:
+                render += self.fline_oneblock(row, width) + '\n'
+
+
+            render += self.fline_oneblock(f"{'Player to play':<20}: {self.agent_selection}", width) + '\n'
+            render += self.fline_oneblock(f"{'Round':<20}: {r}", width) + '\n'
+            render += self.fline_oneblock(f"{'Player trick points':<20}: {self.player_trick_points}", width) + '\n'
             
             cur_trick_string = f"{'Current trick':<20}: "
-            for card in self.cards_played[self.round]:
+            for card in self.cards_played[r]:
                 if card != 0:
                     cur_trick_string += f"{self.unique_cards[card-1].__repr__()} "
-            render += self.format_line(cur_trick_string, width) + '\n'
+            render += self.fline_oneblock(cur_trick_string, width) + '\n'
 
             cardsinhand_string = f"{'Cards in hand':<20}: "
             for card in self.player_cards[int(self.agent_selection[6])]:
                 if card != 0:
                     cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
-            render += self.format_line(cardsinhand_string, width) + '\n'
+            render += self.fline_oneblock(cardsinhand_string, width) + '\n'
             
-            render += self.format_line(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
+            render += self.fline_oneblock(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
             render += '╚' + '═'*(width+1) + '╝'
 
 
             return render
         
-    def format_line(self, content, width=100):
+    def fline_oneblock(self, content, width=100):
+        # shoutout ChatGPT
         padding = width - len(content)
         return f"║ {content}{' ' * padding}║"
+    
+    def draw_dynamic_grid_with_content(self, rows, cols, content, cell_width=8, cell_height=1):
+        # shoutout ChatGPT
+        def draw_top_or_bottom(border_start, border_mid, border_end):
+            return border_start + (("═" * cell_width) + border_mid) * (cols - 1) + "═" * cell_width + border_end
+
+        def draw_divider_row():
+            return "╠" + (("═" * cell_width) + "╬") * (cols - 1) + "═" * cell_width + "╣"
+
+        def draw_empty_row():
+            return "║" + (" " * cell_width + "║") * cols
+
+        def draw_content_row(row_content):
+            row = "║"
+            for cell in row_content:
+                cell = f"{cell[:cell_width]:^{cell_width}}"  # Center-align content within the cell width
+                row += f"{cell}║"
+            return row
+
+        # Construct the grid
+        grid = []
+        grid.append(draw_top_or_bottom("╔", "╦", "╗"))  # Top border
+        for row in range(rows):
+            grid.append(draw_content_row(content[row]))  # Add content row
+            for _ in range(cell_height - 1):  # Add padding rows if cell_height > 1
+                grid.append(draw_empty_row())
+            if row < rows - 1:  # Add dividers if not the last row
+                grid.append(draw_divider_row())
+        grid.append(draw_top_or_bottom("╚", "╩", "╝"))  # Bottom border
+
+        return grid
+
 
     def observation_space(self):
         observation_space = SpaceDict({
