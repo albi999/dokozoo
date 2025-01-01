@@ -277,7 +277,7 @@ class raw_env(AECEnv):
             gridrow = []
             for i in range(7):
                 gridrow.append(f"Player{((game_starter+i-1) % 4) + 1} ")
-            gridrow.append(f"{'Winner':<8}" )
+            gridrow.append(f"Winner" )
             gridcontent.append(gridrow)
 
             gridrow = []
@@ -286,7 +286,7 @@ class raw_env(AECEnv):
                     if card == 0:
                         gridrow.append("[▒▒▒]")
                     else:
-                        gridrow.append(f"{self.unique_cards[card-1].__repr__():<8}")
+                        gridrow.append(f"{self.unique_cards[card-1].__repr__()}")
                 if round==0:
                     for i in range(3):
                         gridrow.append("")
@@ -306,7 +306,7 @@ class raw_env(AECEnv):
                 for i in range(((twb[round] - game_starter) % 4)):
                     gridrow.append("")
             
-            render = self.draw_dynamic_grid_with_content(self.round+2, 8, gridcontent, 8, 1)
+            render = self.build_dynamic_grid_with_content(self.round+2, 8, gridcontent, 9, 1)
             return render
         
     def render(self, action):
@@ -355,7 +355,7 @@ class raw_env(AECEnv):
         padding = width - len(content)
         return f"║ {content}{' ' * padding}║"
     
-    def draw_dynamic_grid_with_content(self, rows, cols, content, cell_width=8, cell_height=1):
+    def build_dynamic_grid_with_content(self, rows, cols, content, cell_width=8, cell_height=1):
         # shoutout ChatGPT
         def draw_top_or_bottom(border_start, border_mid, border_end):
             return border_start + (("═" * cell_width) + border_mid) * (cols - 1) + "═" * cell_width + border_end
