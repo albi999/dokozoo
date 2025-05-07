@@ -1,7 +1,7 @@
-import doko_environment
+import doko_environment_minimal
 import numpy as np
 
-env = doko_environment.env(render_mode = "ansi")
+env = doko_environment_minimal.env(render_mode = "ansi")
 env.reset(seed=42)
 
 
