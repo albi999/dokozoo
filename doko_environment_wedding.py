@@ -61,45 +61,50 @@ class raw_env(AECEnv):
         """The init method takes in environment arguments.
 
         Should define the following attributes:
+
+        - render_mode                       'ansi'
+
         - possible_agents                   ['player1', 'player2', 'player3', 'player4']
-        - round                             0 ... 9
-        - game_type                         0 Normal, 1 Wedding, 2 Poverty
-        - unique_cards                      [array of Card-objects] index of card-object corresponds to the action_index of playing the card
-        - player_cards                      [player1_cards, ..., player4_cards]
-        - cards_played                      [[12 1 2 3], [17 20 1 7], [3 4 0 0]...] 0 means card hasn't been played yet
-        - player_trick_points               [player1_points, ..., player4_points]
-        - team_trick_points                       [team1_points, team2_points]
-        - current_card_index                0 ... 3
-        - tricks_won_by                     [3 1 3 4 0 0 0 0 0 0]: player3 won first trick, player1 won second trick, ..., playing fifth trick atm
         - agent_selection                   'player1', ..., 'player4'
         - starter                           1, ..., 4: player who started the game
-        - render_mode                       'ansi'
+
+        - unique_cards                      [array of Card-objects] index of card-object corresponds to the action_index of playing the card
+        - player_cards                      [player1_cards, ..., player4_cards]
+
+
+        - round                             0 ... 9
+        - health_calls
+        - game_type                         0 Normal, 1 Wedding, 2 Poverty
+        - teams                             array of size 4; index 0 corresponds to player1 and so forth
+
+        - current_card_index                0 ... 3
+        - cards_played                      [[12 1 2 3], [17 20 1 7], [3 4 0 0]...] 0 means card hasn't been played yet
+        - tricks_won_by                     [3 1 3 4 0 0 0 0 0 0]: player3 won first trick, player1 won second trick, ..., playing fifth trick atm
+        - player_trick_points               [player1_points, ..., player4_points]
+        - team_trick_points                 [reh_points, kontra_points]
 
         These attributes should not be changed after initialization.
         """
-
+        self.render_mode = render_mode
+        
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
+        self.agent_selection = None
+        self.starter = None 
+
         self.unique_cards = None 
         self.player_cards = None
-        self.reh = None
-        self.kontra = None
 
         self.round = None
+        self.health_calls = None
         self.game_type = None
+        self.teams = None
+
         self.current_card_index = None 
         self.cards_played = None
         self.tricks_won_by = None
-
         self.player_trick_points = None
         self.team_trick_points = None
-
-        # agent selection attributes
-        self.agent_selection = None
-        self.starter = None # player starting at the beginning of the game
-
-        self.render_mode = render_mode
-
-    
+        
     
     def reset(self, seed=None, options=None):
         """Reset set the environment to a starting point.
@@ -113,51 +118,43 @@ class raw_env(AECEnv):
 
         And must set up the environment so that render(), step(), and observe() can be called without issues.
         """
-
         self.agents = copy(self.possible_agents)
-        self.unique_cards = create_unique_cards()
 
-        # dealing cards
-        deck = np.repeat(np.arange(1,21), 2)
-        random.Random(seed).shuffle(deck)
-        player1_cards = deck[:10]
-        player2_cards = deck[10:20]
-        player3_cards = deck[20:30]
-        player4_cards = deck[30:40]
-
-        self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
-        self.print_player_cards()
-
-        
-
-       
-        # TODO: completely unnecessary to have reh and contra and both have size 4    
-        # actually maybe useful for team-observation: allows calling something like
-        # "team": 2 - self.reh[player_number]
-        # Problem when teams are not decided yet     
-        # EDIT: 4 WAS RIGHT FOR SOLOS, I WAS RIGHT ALL ALONG
-        # but one would be enough either way, cause you cant be Reh and Kontra, both is overkill
-        self.reh = np.zeros(4, dtype=np.int64)
-        self.kontra = np.zeros(4, dtype=np.int64)
-
-
-        self.round = 0 # rounds 0 ... 9
-        self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
-        self.cards_played = np.zeros((10,4), dtype=np.int64)  # no cards played so far
-        self.tricks_won_by = np.zeros(10, dtype=np.int64) # no tricks won by anyone
-       
-        self.player_trick_points = np.zeros(4, dtype=np.int64)
-        self.team_trick_points = np.zeros(2, dtype=np.int64)
-
-
-        
-        
+        # agent_selection, starter
         # random starter but still that 1 comes after 4, 2 after 1, 3 after 2, 4 after 3
         rand4 = random.randrange(4)
         random_agent_order = np.roll(copy(self.agents), rand4)
         self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
         self.starter = int(self.agent_selection[6]) # starter between 1 and 4
+        
+        # unique_cards, player_cards
+        self.unique_cards = create_unique_cards()
+        # dealing
+        deck = np.repeat(np.arange(1,21), 2)
+        random.Random(seed).shuffle(deck)
+        player1_cards = deck[:10]
+        player2_cards = deck[10:20]
+        player3_cards = deck[20:30]
+        player4_cards = deck[30:40]
+        self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
+        self.print_player_cards()
+
+        
+        # rounds, game_type, teams
+        self.round = 0 # rounds 0 ... 9
+        self.health_calls = np.zeros(4, dtype=np.int64)
+        self.game_type = 0 
+        self.teams = np.zeros(4, dtype=np.int64)
+
+
+        # current_cards_index, cards_played, tricks_won_by, player_trick_points, team_trick_points
+        self.current_card_index = 0 # indicates which card has to be played during a trick; 0:first - 3: fourth
+        self.cards_played = np.zeros((10,4), dtype=np.int64)  # no cards played so far
+        self.tricks_won_by = np.zeros(10, dtype=np.int64) # no tricks won by anyone
+        self.player_trick_points = np.zeros(4, dtype=np.int64) # no trick_points yet
+        self.team_trick_points = np.zeros(2, dtype=np.int64) # no trick_points yet
+
 
         # copy paste shit
         self.rewards = {i: 0 for i in self.agents}
@@ -184,8 +181,13 @@ class raw_env(AECEnv):
         agent_number = int(agent[6])
 
 
+        # TODO:
+        # if round==0:
+        #   action --> health_calls
 
 
+
+        # else (case: actual game rounds (10))
         cards_in_hand = self.player_cards[agent_number-1]
         action_card_indices = np.where(cards_in_hand == action+1)[0]
         if action_card_indices.size > 0:
@@ -199,8 +201,14 @@ class raw_env(AECEnv):
 
         
 
-        # check if trick is over
+        # check if round is over
         if self._agent_selector.is_last():
+            # TODO:
+            # if round == 0:
+            #   ground_truth_game_type is determined, possibly even observed_game_type
+
+
+            # else (case: actual game rounds (10))
             # compute trick winner 
             trick_winner = self.trick_winner_calc() 
             self.tricks_won_by[r] = trick_winner
@@ -215,7 +223,7 @@ class raw_env(AECEnv):
             if r == 9:
                 winning_team = 2 # impossible value
                 # TODO np.argmax(self.team_trick_points) not entirely correct
-                # has to change when adding calls
+                # has to change when or if adding calls
                 if self.team_trick_points[1]==120:
                     winning_team = 1
                 else:
@@ -245,13 +253,21 @@ class raw_env(AECEnv):
         
 
     def observe(self, agent):
-        # TODO add "knows_partner" bool to observations
+        r = self.round
+
+        # TODO
+        # if round == 0:
+        #   other action_mask_calc()
+        #   other observation = {}
+        
+
+        # else ((case: actual game rounds (10))
         action_mask = self.action_mask_calc() if agent==self.agent_selection else np.zeros(20, dtype=np.int8)
         player_number = int(self.agent_selection[6])
         observation = {
-            "round": self.round,
+            "round": r,
             "game_type": self.game_type,
-            "team": self.
+            "teams": update_team_belief(), # TODO
             "cards_in_hand": self.player_cards[player_number-1], 
             "cards_played": self.cards_played,
             "tricks_won_by": self.tricks_won_by,
@@ -262,164 +278,13 @@ class raw_env(AECEnv):
 
         return observation
 
-    def render_played_cards(self):
-        if self.render_mode is None:
-            gymnasium.logger.warn(
-                "You are calling render method without specifying any render mode."
-            )
-        elif self.render_mode == "ansi":
-            '''
-            game_starter = self.starter
-            render = ""
-
-            for i in range(7):
-                render += f"Player{((game_starter+i-1) % 4) + 1} "
-            render += f"{'Winner':<8}" + '\n'
-
-            for round in range(self.round+1):
-                for card in self.cards_played[round]:
-                    render += f"{self.unique_cards[card-1].__repr__():<8}"
-                if round==0:
-                    render += f"{'':<8}"*(3)+f"[{self.tricks_won_by[round]}]" + '\n'
-                else:
-                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1) % 4)+f"[{self.tricks_won_by[round]}]" + '\n'
-                render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter)%4)
-            return render
-            '''
-            game_starter = self.starter
-            twb = self.tricks_won_by
-
-            gridcontent = []
-
-            gridrow = []
-            for i in range(7):
-                gridrow.append(f"Player{((game_starter+i-1) % 4) + 1} ")
-            gridrow.append(f"Winner" )
-            gridcontent.append(gridrow)
-
-            gridrow = []
-            for round in range(self.round+1):
-                for card in self.cards_played[round]:
-                    if card == 0:
-                        gridrow.append("[▒▒▒]")
-                    else:
-                        gridrow.append(f"{self.unique_cards[card-1].__repr__()}")
-                if round==0:
-                    for i in range(3):
-                        gridrow.append("")
-                else:
-                    for i in range(((game_starter - twb[round-1] - 1) % 4)):
-                        gridrow.append("")
-
-                if twb[round] == 0:
-                    gridrow.append("[▒▒▒]")
-                else:
-                    gridrow.append(f"[{twb[round]}]")  
-
-                gridcontent.append(gridrow)
-
-                gridrow = []
-
-                for i in range(((twb[round] - game_starter) % 4)):
-                    gridrow.append("")
-            
-            render = self.build_dynamic_grid_with_content(self.round+2, 8, gridcontent, 9, 1)
-            return render
-        
-    def render(self, action):
-        if self.render_mode is None:
-            gymnasium.logger.warn(
-                "You are calling render method without specifying any render mode."
-            )
-        elif self.render_mode == "ansi":
-            width = 95
-            render = ""
-
-            r = self.round
-
-            render += '╔' + '═'*(width+1) + '╗' + '\n'
-
-            
-            game_so_far = self.render_played_cards()
-            for row in game_so_far:
-                render += self.fline_oneblock(row, width) + '\n'
-
-
-            render += self.fline_oneblock(f"{'Player to play':<20}: {self.agent_selection}", width) + '\n'
-            render += self.fline_oneblock(f"{'Round':<20}: {r}", width) + '\n'
-            render += self.fline_oneblock(f"{'Player trick points':<20}: {self.player_trick_points}", width) + '\n'
-            
-            cur_trick_string = f"{'Current trick':<20}: "
-            for card in self.cards_played[r]:
-                if card != 0:
-                    cur_trick_string += f"{self.unique_cards[card-1].__repr__()} "
-            render += self.fline_oneblock(cur_trick_string, width) + '\n'
-
-            cardsinhand_string = f"{'Cards in hand':<20}: "
-            for card in self.player_cards[int(self.agent_selection[6])-1]:
-                if card != 0:
-                    cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
-            render += self.fline_oneblock(cardsinhand_string, width) + '\n'
-            
-            render += self.fline_oneblock(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
-            render += '╚' + '═'*(width+1) + '╝'
-
-
-            return render
-        
-    def fline_oneblock(self, content, width=100):
-        # shoutout ChatGPT
-        padding = width - len(content)
-        return f"║ {content}{' ' * padding}║"
     
-    def build_dynamic_grid_with_content(self, rows, cols, content, cell_width=8, cell_height=1):
-        # shoutout ChatGPT
-        def draw_top_or_bottom(border_start, border_mid, border_end):
-            return border_start + (("═" * cell_width) + border_mid) * (cols - 1) + "═" * cell_width + border_end
-
-        def draw_divider_row():
-            return "╠" + (("═" * cell_width) + "╬") * (cols - 1) + "═" * cell_width + "╣"
-
-        def draw_empty_row():
-            return "║" + (" " * cell_width + "║") * cols
-
-        def draw_content_row(row_content):
-            row = "║"
-            for cell in row_content:
-                cell = f"{cell[:cell_width]:^{cell_width}}"  # Center-align content within the cell width
-                row += f"{cell}║"
-            return row
-
-        # Construct the grid
-        grid = []
-        grid.append(draw_top_or_bottom("╔", "╦", "╗"))  # Top border
-        for row in range(rows):
-            grid.append(draw_content_row(content[row]))  # Add content row
-            for _ in range(cell_height - 1):  # Add padding rows if cell_height > 1
-                grid.append(draw_empty_row())
-            if row < rows - 1:  # Add dividers if not the last row
-                grid.append(draw_divider_row())
-        grid.append(draw_top_or_bottom("╚", "╩", "╝"))  # Bottom border
-
-        return grid
-
-    def print_player_cards(self):
-        print('═'*80)
-        for i, cards in enumerate(self.player_cards):
-            hand = ""
-            for card in cards:
-                if card != 0:
-                    hand += f"{self.unique_cards[card-1].__repr__()}"
-
-            print(f"Player{i+1}: [{hand}]" + '\n')
-        print('═'*80)
-        
 
     def observation_space(self):
         observation_space = SpaceDict({
             "round": Discrete(10),
             "game_type": Discrete(3),
-            "team": Discrete(3),
+            "teams": MultiDiscrete(4 * [3]),
             "cards_in_hand": MultiDiscrete(10 * [21]),
             "cards_played": MultiDiscrete(10 * [4 * [21]]),
             "tricks_won_by": MultiDiscrete(10 * [5]),
@@ -431,8 +296,11 @@ class raw_env(AECEnv):
     # 40 cards but because of Duplicates only 20 possible actions
     # theoretically only max. 10 actions but this should work as well
     def action_space(self, agent):
+        '''
+        TODO: 
         if self.round == 0:
             return Discrete(3) # in first round 3 possible answers: normal, wedding, poverty
+        '''
         return Discrete(20) 
     
 
@@ -640,3 +508,157 @@ class raw_env(AECEnv):
         
         return trick_points
             
+
+    # RENDERING 
+    def render_played_cards(self):
+        if self.render_mode is None:
+            gymnasium.logger.warn(
+                "You are calling render method without specifying any render mode."
+            )
+        elif self.render_mode == "ansi":
+            '''
+            game_starter = self.starter
+            render = ""
+
+            for i in range(7):
+                render += f"Player{((game_starter+i-1) % 4) + 1} "
+            render += f"{'Winner':<8}" + '\n'
+
+            for round in range(self.round+1):
+                for card in self.cards_played[round]:
+                    render += f"{self.unique_cards[card-1].__repr__():<8}"
+                if round==0:
+                    render += f"{'':<8}"*(3)+f"[{self.tricks_won_by[round]}]" + '\n'
+                else:
+                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1) % 4)+f"[{self.tricks_won_by[round]}]" + '\n'
+                render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter)%4)
+            return render
+            '''
+            game_starter = self.starter
+            twb = self.tricks_won_by
+
+            gridcontent = []
+
+            gridrow = []
+            for i in range(7):
+                gridrow.append(f"Player{((game_starter+i-1) % 4) + 1} ")
+            gridrow.append(f"Winner" )
+            gridcontent.append(gridrow)
+
+            gridrow = []
+            for round in range(self.round+1):
+                for card in self.cards_played[round]:
+                    if card == 0:
+                        gridrow.append("[▒▒▒]")
+                    else:
+                        gridrow.append(f"{self.unique_cards[card-1].__repr__()}")
+                if round==0:
+                    for i in range(3):
+                        gridrow.append("")
+                else:
+                    for i in range(((game_starter - twb[round-1] - 1) % 4)):
+                        gridrow.append("")
+
+                if twb[round] == 0:
+                    gridrow.append("[▒▒▒]")
+                else:
+                    gridrow.append(f"[{twb[round]}]")  
+
+                gridcontent.append(gridrow)
+
+                gridrow = []
+
+                for i in range(((twb[round] - game_starter) % 4)):
+                    gridrow.append("")
+            
+            render = self.build_dynamic_grid_with_content(self.round+2, 8, gridcontent, 9, 1)
+            return render
+        
+    def render(self, action):
+        if self.render_mode is None:
+            gymnasium.logger.warn(
+                "You are calling render method without specifying any render mode."
+            )
+        elif self.render_mode == "ansi":
+            width = 95
+            render = ""
+
+            r = self.round
+
+            render += '╔' + '═'*(width+1) + '╗' + '\n'
+
+            
+            game_so_far = self.render_played_cards()
+            for row in game_so_far:
+                render += self.fline_oneblock(row, width) + '\n'
+
+
+            render += self.fline_oneblock(f"{'Player to play':<20}: {self.agent_selection}", width) + '\n'
+            render += self.fline_oneblock(f"{'Round':<20}: {r}", width) + '\n'
+            render += self.fline_oneblock(f"{'Player trick points':<20}: {self.player_trick_points}", width) + '\n'
+            
+            cur_trick_string = f"{'Current trick':<20}: "
+            for card in self.cards_played[r]:
+                if card != 0:
+                    cur_trick_string += f"{self.unique_cards[card-1].__repr__()} "
+            render += self.fline_oneblock(cur_trick_string, width) + '\n'
+
+            cardsinhand_string = f"{'Cards in hand':<20}: "
+            for card in self.player_cards[int(self.agent_selection[6])-1]:
+                if card != 0:
+                    cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
+            render += self.fline_oneblock(cardsinhand_string, width) + '\n'
+            
+            render += self.fline_oneblock(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
+            render += '╚' + '═'*(width+1) + '╝'
+
+
+            return render
+        
+    def fline_oneblock(self, content, width=100):
+        # shoutout ChatGPT
+        padding = width - len(content)
+        return f"║ {content}{' ' * padding}║"
+    
+    def build_dynamic_grid_with_content(self, rows, cols, content, cell_width=8, cell_height=1):
+        # shoutout ChatGPT
+        def draw_top_or_bottom(border_start, border_mid, border_end):
+            return border_start + (("═" * cell_width) + border_mid) * (cols - 1) + "═" * cell_width + border_end
+
+        def draw_divider_row():
+            return "╠" + (("═" * cell_width) + "╬") * (cols - 1) + "═" * cell_width + "╣"
+
+        def draw_empty_row():
+            return "║" + (" " * cell_width + "║") * cols
+
+        def draw_content_row(row_content):
+            row = "║"
+            for cell in row_content:
+                cell = f"{cell[:cell_width]:^{cell_width}}"  # Center-align content within the cell width
+                row += f"{cell}║"
+            return row
+
+        # Construct the grid
+        grid = []
+        grid.append(draw_top_or_bottom("╔", "╦", "╗"))  # Top border
+        for row in range(rows):
+            grid.append(draw_content_row(content[row]))  # Add content row
+            for _ in range(cell_height - 1):  # Add padding rows if cell_height > 1
+                grid.append(draw_empty_row())
+            if row < rows - 1:  # Add dividers if not the last row
+                grid.append(draw_divider_row())
+        grid.append(draw_top_or_bottom("╚", "╩", "╝"))  # Bottom border
+
+        return grid
+
+    def print_player_cards(self):
+        print('═'*80)
+        for i, cards in enumerate(self.player_cards):
+            hand = ""
+            for card in cards:
+                if card != 0:
+                    hand += f"{self.unique_cards[card-1].__repr__()}"
+
+            print(f"Player{i+1}: [{hand}]" + '\n')
+        print('═'*80)
+        
