@@ -91,6 +91,27 @@ class raw_env(AECEnv):
         self.agent_selection = None
         self.starter = None 
 
+        self.observation_spaces = {
+            agent_name: SpaceDict(
+                {
+                "player_cards": MultiDiscrete(4 * [10 * [21]]),
+                "round": Discrete(10),
+                "teams": MultiDiscrete(4 * [2]),
+                "my_cards": MultiDiscrete(10 * [21]),
+                "my_team": Discrete(2),
+                "cards_played": MultiDiscrete(10 * [4 * [21]]),
+                "tricks_won_by": MultiDiscrete(10 * [5]),
+                "player_trick_points": MultiDiscrete(4*[240]),
+                "team_trick_points": MultiDiscrete(2*[240]),
+                "action_mask": MultiBinary(20)
+                }
+            )
+            for agent_name in self.possible_agents
+        }
+
+        self.action_spaces = {agent_name: Discrete(20) for agent_name in self.possible_agents}
+
+
         self.unique_cards = None 
         self.player_cards = None
 
@@ -122,7 +143,7 @@ class raw_env(AECEnv):
 
         # agent_selection, starter
         # random starter but still that 1 comes after 4, 2 after 1, 3 after 2, 4 after 3
-        rand4 = random.randrange(4)
+        rand4 = random.Random().randrange(4)
         random_agent_order = np.roll(copy(self.agents), rand4)
         self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
@@ -132,7 +153,7 @@ class raw_env(AECEnv):
         self.unique_cards = create_unique_cards()
         # dealing
         deck = np.repeat(np.arange(1,21), 2)
-        random.Random(seed).shuffle(deck)
+        random.Random().shuffle(deck)
         player1_cards = deck[:10]
         player2_cards = deck[10:20]
         player3_cards = deck[20:30]
@@ -154,7 +175,7 @@ class raw_env(AECEnv):
                 print(f"#reshuffles = {reshuffles}")
 
                 deck = np.repeat(np.arange(1,21), 2)
-                random.Random(seed+reshuffles).shuffle(deck)
+                random.Random().shuffle(deck)
                 player1_cards = deck[:10]
                 player2_cards = deck[10:20]
                 player3_cards = deck[20:30]
@@ -295,25 +316,13 @@ class raw_env(AECEnv):
 
     
 
-    def observation_space(self):
-        observation_space = SpaceDict({
-            "player_cards": MultiDiscrete(4 * [10 * [21]]),
-            "round": Discrete(10),
-            "teams": MultiDiscrete(4 * [2]),
-            "my_cards": MultiDiscrete(10 * [21]),
-            "my_team": Discrete(2),
-            "cards_played": MultiDiscrete(10 * [4 * [21]]),
-            "tricks_won_by": MultiDiscrete(10 * [5]),
-            "player_trick_points": MultiDiscrete(4*[240]),
-            "team_trick_points": MultiDiscrete(2*[240]),
-            "action_mask": MultiBinary(20)
-        })
-        return observation_space
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
 
     # 40 cards but because of Duplicates only 20 possible actions
     # theoretically only max. 10 actions but this should work as well
     def action_space(self, agent):
-        return Discrete(20) 
+        return self.action_spaces[agent]
     
 
     def set_game_result(self, winning_team):
