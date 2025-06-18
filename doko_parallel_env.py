@@ -9,7 +9,7 @@ from doko_cards import create_unique_cards
 # TODO: Pickleeeee
 
 
-from pettingzoo import AECEnv
+from pettingzoo import ParallelEnv
 from pettingzoo.utils.agent_selector import agent_selector
 from pettingzoo.utils import wrappers
 
@@ -50,9 +50,9 @@ def env(**kwargs):
     env = wrappers.OrderEnforcingWrapper(env)
     return env
 
-class raw_env(AECEnv):
+class raw_env(ParallelEnv):
     metadata = {
-        "name": "doko_environment",
+        "name": "doko_parallel_env",
         "render_modes": ["ansi"]
     }
 
@@ -88,9 +88,17 @@ class raw_env(AECEnv):
         self.render_mode = render_mode
         
         self.possible_agents = ['player1', 'player2', 'player3', 'player4']
+
+        # optional: a mapping between agent name and ID
+        self.agent_name_mapping = dict(
+            zip(self.possible_agents, list(range(len(self.possible_agents))))
+        )
+
         self.agent_selection = None
         self.starter = None 
 
+
+        # Observation and Action spaces
         self.observation_spaces = {
             agent_name: SpaceDict(
                 {
@@ -109,15 +117,13 @@ class raw_env(AECEnv):
             for agent_name in self.possible_agents
         }
 
-        self.action_spaces = {agent_name: Discrete(20) for agent_name in self.possible_agents}
+        self.action_spaces = {agent_name: Discrete(21) for agent_name in self.possible_agents}
 
-
+        # Cards
         self.unique_cards = None 
         self.player_cards = None
 
         self.round = None
-        # self.health_calls = None
-        # self.game_type = None
         self.teams = None
 
         self.current_card_index = None 
@@ -186,8 +192,9 @@ class raw_env(AECEnv):
             
             else:
                 break
-
-
+        
+        print(f"#reshuffles = {reshuffles}")
+        self.print_player_cards()
         # rounds, game_type, teams
         self.round = 0 # rounds 0 ... 9
         # self.health_calls = np.zeros(4, dtype=np.int64)
@@ -218,26 +225,36 @@ class raw_env(AECEnv):
         self.infos = {i: {} for i in self.agents}
         
 
-    def step(self, action):
+    def step(self, actions):
         # action number between 0 and 19 corresponding to cards between 1 and 20
         if (
             self.terminations[self.agent_selection]
             or self.truncations[self.agent_selection]
         ):
-            return self._was_dead_step(action)
+            return self._was_dead_step(actions)
         
+        current_agent = self.agent_selection
+        agent_id = int(current_agent[6])
+
+        action = actions[current_agent]
+        for agent, act in actions.items():
+            if agent != current_agent:
+                assert act == 20 
+
         if self.render_mode == "ansi":
             print(self.render(action))
 
 
-        r = self.round
-        agent = self.agent_selection
-        agent_number = int(agent[6])
-
-
-
+        # Initializing return values: obs_dict, rewards_dict, Terminated Dictionary, Truncated Dictionary, Info Dictionary
+        obs_dict = {}
+        rewards_dict = {}
+        terms_dict = {}
+        truncs_dict = {}
+        infos_dict = {}
         
-        cards_in_hand = self.player_cards[agent_number-1]
+
+        r = self.round
+        cards_in_hand = self.player_cards[agent_id-1]
         action_card_indices = np.where(cards_in_hand == action+1)[0]
         if action_card_indices.size > 0:
             cards_in_hand[action_card_indices[0]] = 0
@@ -245,7 +262,7 @@ class raw_env(AECEnv):
             print("Something went wrong and your code fucking sucks")
             print("@step() action_card_index is empty")
         
-        self.player_cards[agent_number-1] = cards_in_hand
+        self.player_cards[agent_id-1] = cards_in_hand
         self.cards_played[r][self.current_card_index] = action+1
 
         
@@ -253,6 +270,7 @@ class raw_env(AECEnv):
         # check if round is over
         if self._agent_selector.is_last():
             # compute trick winner 
+            # TODO: change reward function
             trick_winner = self.trick_winner_calc() 
             self.tricks_won_by[r] = trick_winner
             trick_points = self.trick_points_calc()
@@ -261,9 +279,10 @@ class raw_env(AECEnv):
                 self.team_trick_points[1] += trick_points
             else:
                 self.team_trick_points[0] += trick_points
-            
+            # TODO: rewards_dict calc here
             # if game is over
             if r == 9:
+                # TODO Terms_dict and truncs_dict here
                 winning_team = 2 # impossible value
                 # TODO np.argmax(self.team_trick_points) not entirely correct
                 # has to change when or if adding calls
@@ -289,20 +308,32 @@ class raw_env(AECEnv):
         self.agent_selection = self._agent_selector.next()
         
 
-        
-        
+        # TODO 
+        # Observation dictionary 
+        # Reward Dictionary
+        # Terminated Dictionary
+        # Truncated Dictionary
+        # Info Dictionary
+
+        obs_dict = self.all_obs_calc()
 
 
-        
 
-    def observe(self, agent):
-        r = self.round
+    def all_obs_calc(self):
+        observations = {}
 
-        action_mask = self.action_mask_calc() if agent==self.agent_selection else np.zeros(20, dtype=np.int8)
-        player_number = int(self.agent_selection[6])
-        observation = {
+        for agent in self.agents:
+            action_mask = None
+            if agent == self.agent_selection:
+                action_mask = self.action_mask_calc() #TODO Action_mask calc extension to 21 actions 
+            else:
+                action_mask = np.zeros(21, dtype=np.int8)
+
+            player_number = int(agent[6])
+
+            observation = {
             "player_cards": self.player_cards,
-            "round": r,
+            "round": self.round,
             "teams": self.teams,
             "my_cards": self.player_cards[player_number-1], 
             "my_team": self.teams[player_number-1],
@@ -311,8 +342,12 @@ class raw_env(AECEnv):
             "player_trick_points": self.player_trick_points,
             "team_trick_points": self.team_trick_points,
             "action_mask": action_mask
-        }
-        return observation
+            }
+            
+            observations[agent] = observation
+
+        return observations
+        
 
     
 

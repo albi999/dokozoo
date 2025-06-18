@@ -41,6 +41,8 @@ max_steps = 1000000  # Max steps
 pbar = tqdm(total=max_steps)    
 while agent.steps[-1] < max_steps:
     obs, info  = env.reset() # Reset environment at start of episode
+    obs = None
+    info = None
     scores = np.zeros((num_envs, len(agent.shared_agent_ids)))
     completed_episode_scores = []
     steps = 0
@@ -145,7 +147,7 @@ while agent.steps[-1] < max_steps:
         pbar.update(-(agent.learn_step // -num_envs))
         pbar.set_description(f"Score: {np.mean(completed_episode_scores[-10:])}")
 
-    print(steps)
+    # print(steps)
     agent.steps[-1] += steps
 
 
