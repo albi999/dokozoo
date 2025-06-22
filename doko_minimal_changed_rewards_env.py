@@ -9,7 +9,7 @@ from doko_cards import create_unique_cards
 # TODO: Pickleeeee
 
 
-from pettingzoo import ParallelEnv
+from pettingzoo import AECEnv
 from pettingzoo.utils.agent_selector import agent_selector
 from pettingzoo.utils import wrappers
 
@@ -50,9 +50,9 @@ def env(**kwargs):
     env = wrappers.OrderEnforcingWrapper(env)
     return env
 
-class raw_env(ParallelEnv):
+class raw_env(AECEnv):
     metadata = {
-        "name": "doko_parallel_env",
+        "name": "doko_environment",
         "render_modes": ["ansi"]
     }
 
@@ -88,18 +88,9 @@ class raw_env(ParallelEnv):
         self.render_mode = render_mode
         
         self.possible_agents = ['agent_1', 'agent_2', 'agent_3', 'agent_4']
-
-        # optional: a mapping between agent name and ID
-        self.agent_name_mapping = dict(
-            zip(self.possible_agents, list(range(len(self.possible_agents))))
-        )
-
         self.agent_selection = None
-        self._agent_selector = None
-        self.starter_number = None 
+        self.starter = None 
 
-
-        # Observation and Action spaces
         self.observation_spaces = {
             agent_name: SpaceDict(
                 {
@@ -111,8 +102,8 @@ class raw_env(ParallelEnv):
                 "cards_played": MultiDiscrete(10 * [4 * [21]]),
                 "tricks_won_by": MultiDiscrete(10 * [5]),
                 "player_trick_points": MultiDiscrete(4*[240]),
-                "team_trick_points": MultiDiscrete(2*[240]),
-                "action_mask": MultiDiscrete(20*[2])
+                "team_trick_points": MultiDiscrete(2*[240])
+                # "action_mask": MultiDiscrete(20*[2])  # "AgileRL requires action masks to be defined in the information dictionary."
                 }
             )
             for agent_name in self.possible_agents
@@ -120,11 +111,13 @@ class raw_env(ParallelEnv):
 
         self.action_spaces = {agent_name: Discrete(20) for agent_name in self.possible_agents}
 
-        # Cards
+
         self.unique_cards = None 
         self.player_cards = None
 
         self.round = None
+        # self.health_calls = None
+        # self.game_type = None
         self.teams = None
 
         self.current_card_index = None 
@@ -154,7 +147,7 @@ class raw_env(ParallelEnv):
         random_agent_order = np.roll(copy(self.agents), rand4)
         self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
-        self.starter_number = int(self.agent_selection[6]) # starter between 1 and 4
+        self.starter = int(self.agent_selection[6]) # starter between 1 and 4
         
         # unique_cards, player_cards
         self.unique_cards = create_unique_cards()
@@ -193,10 +186,8 @@ class raw_env(ParallelEnv):
             
             else:
                 break
-        
 
-        print(f"#reshuffles = {reshuffles}")
-        self.print_player_cards()
+
         # rounds, game_type, teams
         self.round = 0 # rounds 0 ... 9
         # self.health_calls = np.zeros(4, dtype=np.int64)
@@ -224,87 +215,40 @@ class raw_env(ParallelEnv):
         self._cumulative_rewards = {name: 0 for name in self.agents}
         self.terminations = {i: False for i in self.agents}
         self.truncations = {i: False for i in self.agents}
-        self.infos = {i: {} for i in self.agents}
+        self.infos = {}
 
 
-        # PARALLELIZATION
-        # have to return dictionary of observation keyed by the agent
-        # only starting agent considered 
-        obs_dict = {}
-        next_agent = self.agent_selection
-        next_action_mask = self.action_mask_calc()
-        next_agent_number = int(next_agent[6])
-        observation = {
-            "player_cards": self.player_cards,
-            "round": self.round,
-            "teams": self.teams,
-            "my_cards": self.player_cards[next_agent_number-1], 
-            "my_team": self.teams[next_agent_number-1],
-            "cards_played": self.cards_played,
-            "tricks_won_by": self.tricks_won_by,
-            "player_trick_points": self.player_trick_points,
-            "team_trick_points": self.team_trick_points,
-            "action_mask": next_action_mask
-        }
-        obs_dict[next_agent] = observation
+       # put action_mask into info
+        for agent in self.agents:
+            if agent == self.agent_selection:
+                self.infos[agent] = {'action_mask': self.action_mask_calc().tolist()}
+            else:
+                self.infos[agent] = {'action_mask': np.zeros(20, dtype=np.int8).tolist()}
 
-
-        # not sure about infos_dict, let's go with dummy infos 
-        infos_dict = {agent:{} for agent in self.agents}
-
-
-        return obs_dict, infos_dict
+        for agent, info in self.infos.items():
+            print(f"{agent}: type={type(info['action_mask'])}, value={info['action_mask']}")
         
 
-    def step(self, actions):
+    def step(self, action):
         # action number between 0 and 19 corresponding to cards between 1 and 20
         if (
             self.terminations[self.agent_selection]
             or self.truncations[self.agent_selection]
         ):
-            return self._was_dead_step(actions)
+            return self._was_dead_step(action)
         
-
-        current_agent = self.agent_selection
-        current_agent_number = int(current_agent[6])
-
-        action = actions[current_agent]
-        for agent, act in actions.items():
-            if agent != current_agent:
-                assert act == 20 
-
         if self.render_mode == "ansi":
             print(self.render(action))
 
 
-        # PARALLELIZATION
-        # Initializing return values: obs_dict, rewards_dict, Terminated Dictionary, Truncated Dictionary, Info Dictionary
-        
-        # Observation Dictionary
-        # obs_dict = {} 
-        # -> initialized and defined at the end of step() after self._agent_selector.next() is called
-
-        # Rewards Dictionary
-        # -> initialized to 0; changed only if a round is finished 
-        # TODO: change down below
-        rewards_dict = {agent: 0 for agent in self.agents} 
-
-        # Terminations Dictionary
-        # -> initialized to False, all agents terminate at the same time when the game ends
-        terms_dict = {agent: False for agent in self.agents}
-
-        # Truncations Dictionary
-        # -> initialized to False as well, I think in my case terminations are the same 
-        # -> action masking prevents false moves which could trigger Truncations, we (ideally) always have a full game
-        truncs_dict = {agent: False for agent in self.agents}
-
-        # Infos Dictionary
-        # -> initialiozed to dummy infos, I don't see the need at the moment to pass any infos
-        infos_dict = {agent:{} for agent in self.agents}
-        
-
         r = self.round
-        cards_in_hand = self.player_cards[current_agent_number-1]
+        agent = self.agent_selection
+        agent_number = int(agent[6])
+
+
+
+        
+        cards_in_hand = self.player_cards[agent_number-1]
         action_card_indices = np.where(cards_in_hand == action+1)[0]
         if action_card_indices.size > 0:
             cards_in_hand[action_card_indices[0]] = 0
@@ -312,7 +256,7 @@ class raw_env(ParallelEnv):
             print("Something went wrong and your code fucking sucks")
             print("@step() action_card_index is empty")
         
-        self.player_cards[current_agent_number-1] = cards_in_hand
+        self.player_cards[agent_number-1] = cards_in_hand
         self.cards_played[r][self.current_card_index] = action+1
 
         
@@ -320,74 +264,46 @@ class raw_env(ParallelEnv):
         # check if round is over
         if self._agent_selector.is_last():
             # compute trick winner 
-            # TODO: change reward function
-            trick_winner_number = self.trick_winner_calc() 
-            self.tricks_won_by[r] = trick_winner_number
+            trick_winner = self.trick_winner_calc() 
+            self.tricks_won_by[r] = trick_winner
             trick_points = self.trick_points_calc()
-            self.player_trick_points[trick_winner_number-1] += trick_points
-            if self.teams[trick_winner_number-1]:
+            self.player_trick_points[trick_winner-1] += trick_points
+            if self.teams[trick_winner-1]:
                 self.team_trick_points[1] += trick_points
 
                 # Calculating Reward after Round
                 trick_winning_indices = np.where(self.teams == 0)[0]
                 for agent_index in trick_winning_indices:
                     agent_number = agent_index+1
-                    agent_string = "agent_" + agent_number
-                    rewards_dict[agent_string] = trick_points
+                    agent_string = "agent_" + str(agent_number)
+                    self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
 
             else:
                 self.team_trick_points[0] += trick_points
-
                 # Calculating Reward after Round
                 trick_winning_indices = np.where(self.teams == 1)[0]
                 for agent_index in trick_winning_indices:
                     agent_number = agent_index+1
-                    agent_string = "agent_" + agent_number
-                    rewards_dict[agent_string] = trick_points
+                    agent_string = "agent_" + str(agent_number)
+                    self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
             
-
-            
-
-
-
             # if game is over
             if r == 9:
-                # TODO Terms_dict and truncs_dict here
                 winning_team = 2 # impossible value
                 # TODO np.argmax(self.team_trick_points) not entirely correct
                 # has to change when or if adding calls
                 if self.team_trick_points[1]==120:
                     winning_team = 1
+
                 else:
                     winning_team = np.argmax(self.team_trick_points)
-
-                winning_players_indices = None
-                # winning_team=0 means 'Reh' won
-                if winning_team==0:
-                    winning_players_indices = np.where(self.teams == 0)[0]
-                else:
-                    winning_players_indices = np.where(self.teams == 1)[0]
-
-
-                print(self.player_trick_points)
-                print(self.team_trick_points)
-                print(f"WINNING TEAM INDEX {winning_team}:  {'REH' if not winning_team else 'KONTRA'}")
-                print(f"WINNING PLAYER INDICES:  {winning_players_indices}")
-
-
-                for agent in self.agents:
-                    terms_dict[agent] = True
-                    infos_dict[agent] = {"legal_moves": []}
-
+                self.set_game_result(winning_team)
                 if self.render_mode == "ansi":
                     print("\n".join(self.render_played_cards()))
             
-
-
-
             agent_order = copy(self.possible_agents)
             # trick_winner_string = f'player{trick_winner}'
-            index = trick_winner_number-1
+            index = trick_winner-1
             new_agent_order = np.concatenate((agent_order[index:], agent_order[:index]))
             self._agent_selector.reinit(new_agent_order)
             self.round += 1
@@ -399,35 +315,41 @@ class raw_env(ParallelEnv):
         self.agent_selection = self._agent_selector.next()
 
 
-        # TODO PARALLELIZATION
-        # Observation dictionary
-        # -> according to Jaime from AgileRL I can have asynchrounysly acting agents in a ParallelEnv if I return only the observations 
-        # of the agent which acts in the next step
+        # put action_mask into info
+        for agent in self.agents:
+            if agent == self.agent_selection:
+                self.infos[agent] = {'action_mask': self.action_mask_calc().tolist()}
+            else:
+                self.infos[agent] = {'action_mask': np.zeros(20, dtype=np.int8).tolist()}
 
-        obs_dict = {}
-        next_agent = self.agent_selection
-        next_action_mask = self.action_mask_calc()
-        next_agent_number = int(next_agent[6])
+
+        
+
+        
+        
+
+
+        
+
+    def observe(self, agent):
+        r = self.round
+        agent_number = int(agent[6])
+        # action_mask = self.action_mask_calc() if agent==self.agent_selection else np.zeros(20, dtype=np.int8)
+        # ->  "AgileRL requires action masks to be defined in the information dictionary."
+        # player_number = int(self.agent_selection[6])
         observation = {
             "player_cards": self.player_cards,
-            "round": self.round,
+            "round": r,
             "teams": self.teams,
-            "my_cards": self.player_cards[next_agent_number-1], 
-            "my_team": self.teams[next_agent_number-1],
+            "my_cards": self.player_cards[agent_number-1], 
+            "my_team": self.teams[agent_number-1],
             "cards_played": self.cards_played,
             "tricks_won_by": self.tricks_won_by,
             "player_trick_points": self.player_trick_points,
-            "team_trick_points": self.team_trick_points,
-            "action_mask": next_action_mask
+            "team_trick_points": self.team_trick_points
+            # "action_mask": action_mask #  "AgileRL requires action masks to be defined in the information dictionary."
         }
-        obs_dict[next_agent] = observation
-
-        
-        return obs_dict, rewards_dict, terms_dict, truncs_dict, infos_dict
-
-        
-
-
+        return observation
 
     
 
@@ -440,7 +362,25 @@ class raw_env(ParallelEnv):
         return self.action_spaces[agent]
     
 
-        
+    def set_game_result(self, winning_team):
+        winning_players_indices = None
+
+        # winning_team=0 means 'Reh' won
+        if winning_team==0:
+            winning_players_indices = np.where(self.teams == 0)[0]
+
+
+        else:
+            winning_players_indices = np.where(self.teams == 1)[0]
+
+        print(self.player_trick_points)
+        print(self.team_trick_points)
+        print(f"WINNING TEAM INDEX {winning_team}:  {'REH' if not winning_team else 'KONTRA'}")
+        print(f"WINNING PLAYER INDICES:  {winning_players_indices}")
+        for i, name in enumerate(self.agents):
+            self.terminations[name] = True
+            print(f"player_i: {i} | {name} | reward {self.rewards[name]}")
+            self.infos[name] = {"legal_moves": []}
 
 
     def action_mask_calc(self):
@@ -456,7 +396,7 @@ class raw_env(ParallelEnv):
         
         # getting round and trick starter
         r = self.round
-        trick_starter = self.starter_number if r == 0 else self.tricks_won_by[r-1] # P1-4
+        trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
         
 
         # if agent starts a trick he can play any card he has
@@ -530,7 +470,7 @@ class raw_env(ParallelEnv):
     def trick_winner_calc(self):
         # getting round, trick starter
         r = self.round
-        trick_starter = self.starter_number if r == 0 else self.tricks_won_by[r-1] # P1-4
+        trick_starter = self.starter if r == 0 else self.tricks_won_by[r-1] # P1-4
         trick = self.cards_played[r]
         # if there are trumps involved, the highest first played trump wins
         card_powers = np.array([self.unique_cards[card_index-1].power for card_index in trick]) # powers for all cards in trick
@@ -559,7 +499,7 @@ class raw_env(ParallelEnv):
                 win_card_in_trick = nont_clubs_indices[np.argmax(card_powers[nont_clubs_mask])]
 
                 # Index of the winning card in trick
-                # So we add the difference between the trick_starter (value 1...4) and the first player self.starter_number seated 
+                # So we add the difference between the trick_starter (value 1...4) and the first player self.starter seated 
                 # % 4 cuz overflow might happen (for example P3 starts, P2 wins, win_card_in_trick=3, 3+(3-1) = 5, 5%4=1, 1+1=2 meaning Player 2 won)
                 trick_winner = ((win_card_in_trick + trick_starter - 1) % 4) + 1
                 return trick_winner
@@ -613,7 +553,7 @@ class raw_env(ParallelEnv):
             )
         elif self.render_mode == "ansi":
             '''
-            game_starter = self.starter_number
+            game_starter = self.starter
             render = ""
 
             for i in range(7):
@@ -626,11 +566,11 @@ class raw_env(ParallelEnv):
                 if round==0:
                     render += f"{'':<8}"*(3)+f"[{self.tricks_won_by[round]}]" + '\n'
                 else:
-                    render += f"{'':<8}"*((self.starter_number - self.tricks_won_by[round-1] - 1) % 4)+f"[{self.tricks_won_by[round]}]" + '\n'
-                render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter_number)%4)
+                    render += f"{'':<8}"*((self.starter - self.tricks_won_by[round-1] - 1) % 4)+f"[{self.tricks_won_by[round]}]" + '\n'
+                render += f"{'':<8}"*((self.tricks_won_by[round]-self.starter)%4)
             return render
             '''
-            game_starter = self.starter_number
+            game_starter = self.starter
             twb = self.tricks_won_by
 
             gridcontent = []

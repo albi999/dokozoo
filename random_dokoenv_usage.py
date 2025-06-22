@@ -1,7 +1,7 @@
-import doko_environment_mdp_minimal
+import doko_minimal_changed_rewards
 import numpy as np
 
-env = doko_environment_mdp_minimal.env(render_mode = "ansi")
+env = doko_minimal_changed_rewards.env(render_mode = "ansi")
 env.reset(seed=42)
 
 

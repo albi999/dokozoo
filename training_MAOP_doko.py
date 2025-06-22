@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import torch
-import doko_environment_mdp_minimal
+import doko_minimal_changed_rewards_env
 from gymnasium import spaces
 from tqdm import tqdm
 
@@ -13,7 +13,7 @@ from agilerl.vector.pz_async_vec_env import AsyncPettingZooVecEnv
 
 from agilerl.algorithms import IPPO
 from agilerl.vector.pz_async_vec_env import AsyncPettingZooVecEnv
-from pettingzoo.utils.conversions import aec_to_parallel
+from pettingzoo.utils.conversions import turn_based_aec_to_parallel
 from agilerl.training.train_multi_agent_on_policy import train_multi_agent_on_policy
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -60,7 +60,7 @@ num_envs = 8
 # Define the simple speaker listener environment as a parallel environment
 env = AsyncPettingZooVecEnv(
     [
-        lambda: aec_to_parallel(doko_environment_mdp_minimal.env(render_mode = "ansi"))
+        lambda: turn_based_aec_to_parallel(doko_minimal_changed_rewards_env.env(render_mode = "ansi"))
         for _ in range(num_envs)
     ]
 )
@@ -121,7 +121,7 @@ trained_pop, pop_fitnesses = train_multi_agent_on_policy(
     eval_steps=None,  # Number of steps in evaluation episode
     eval_loop=1,  # Number of evaluation episodes
     target=200.,  # Target score for early stopping
-    tournament=tournament,  # Tournament selection object
-    mutation=mutations,  # Mutations object
+    tournament=None,  # Tournament selection object
+    mutation=None,  # Mutations object
     wb=True,  # Weights and Biases tracking
 )
