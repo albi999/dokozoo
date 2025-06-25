@@ -1,8 +1,8 @@
-import doko_environment_mdp_minimal
+import tb_doko_env_V3
 import numpy as np
 
-env = doko_environment_mdp_minimal.env(render_mode = "ansi")
-env.reset(seed=42)
+env = tb_doko_env_V3.env(render_mode = "ansi")
+env.reset() # possible to pass seed but I'm not doing that
 
 
 for agent in env.agent_iter():
@@ -13,7 +13,7 @@ for agent in env.agent_iter():
     else:
         # Check if the environment provides an action mask
         if "action_mask" in info:
-            mask = info["action_mask"]
+            mask = np.array(info["action_mask"])
         elif isinstance(observation, dict) and "action_mask" in observation:
             mask = observation["action_mask"]
         else:

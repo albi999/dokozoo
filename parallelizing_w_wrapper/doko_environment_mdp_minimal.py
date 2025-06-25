@@ -87,7 +87,7 @@ class raw_env(AECEnv):
         """
         self.render_mode = render_mode
         
-        self.possible_agents = ['agent_1', 'agent_2', 'agent_3', 'agent_4']
+        self.possible_agents = ['player1', 'player2', 'player3', 'player4']
         self.agent_selection = None
         self.starter = None 
 
@@ -103,7 +103,7 @@ class raw_env(AECEnv):
                 "tricks_won_by": MultiDiscrete(10 * [5]),
                 "player_trick_points": MultiDiscrete(4*[240]),
                 "team_trick_points": MultiDiscrete(2*[240]),
-                "action_mask": MultiDiscrete(20*[2])  # "AgileRL requires action masks to be defined in the information dictionary."
+                "action_mask": MultiDiscrete(20*[2])
                 }
             )
             for agent_name in self.possible_agents
@@ -215,19 +215,8 @@ class raw_env(AECEnv):
         self._cumulative_rewards = {name: 0 for name in self.agents}
         self.terminations = {i: False for i in self.agents}
         self.truncations = {i: False for i in self.agents}
-        self.infos = {}
-
-        '''
-       # put action_mask into info
-        for agent in self.agents:
-            if agent == self.agent_selection:
-                self.infos[agent] = {'action_mask': self.action_mask_calc().tolist()}
-            else:
-                self.infos[agent] = {'action_mask': np.zeros(20, dtype=np.int8).tolist()}
-
-        for agent, info in self.infos.items():
-            print(f"{agent}: type={type(info['action_mask'])}, value={info['action_mask']}")
-        '''
+        self.infos = {i: {} for i in self.agents}
+        
 
     def step(self, action):
         # action number between 0 and 19 corresponding to cards between 1 and 20
@@ -270,23 +259,8 @@ class raw_env(AECEnv):
             self.player_trick_points[trick_winner-1] += trick_points
             if self.teams[trick_winner-1]:
                 self.team_trick_points[1] += trick_points
-
-                # Calculating Reward after Round
-                trick_winning_indices = np.where(self.teams == 1)[0]
-                for agent_index in trick_winning_indices:
-                    agent_number = agent_index+1
-                    agent_string = "agent_" + str(agent_number)
-                    self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
-
             else:
                 self.team_trick_points[0] += trick_points
-                
-                # Calculating Reward after Round
-                trick_winning_indices = np.where(self.teams == 0)[0]
-                for agent_index in trick_winning_indices:
-                    agent_number = agent_index+1
-                    agent_string = "agent_" + str(agent_number)
-                    self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
             
             # if game is over
             if r == 9:
@@ -295,7 +269,6 @@ class raw_env(AECEnv):
                 # has to change when or if adding calls
                 if self.team_trick_points[1]==120:
                     winning_team = 1
-
                 else:
                     winning_team = np.argmax(self.team_trick_points)
                 self.set_game_result(winning_team)
@@ -314,17 +287,6 @@ class raw_env(AECEnv):
 
         self.current_card_index += 1
         self.agent_selection = self._agent_selector.next()
-
-
-        '''
-        # put action_mask into info
-        for agent in self.agents:
-            if agent == self.agent_selection:
-                self.infos[agent] = {'action_mask': self.action_mask_calc().tolist()}
-            else:
-                self.infos[agent] = {'action_mask': np.zeros(20, dtype=np.int8).tolist()}
-        '''
-
         
 
         
@@ -335,21 +297,20 @@ class raw_env(AECEnv):
 
     def observe(self, agent):
         r = self.round
-        agent_number = int(agent[6])
+
         action_mask = self.action_mask_calc() if agent==self.agent_selection else np.zeros(20, dtype=np.int8)
-        # ->  "AgileRL requires action masks to be defined in the information dictionary."
-        # player_number = int(self.agent_selection[6])
+        player_number = int(self.agent_selection[6])
         observation = {
             "player_cards": self.player_cards,
             "round": r,
             "teams": self.teams,
-            "my_cards": self.player_cards[agent_number-1], 
-            "my_team": self.teams[agent_number-1],
+            "my_cards": self.player_cards[player_number-1], 
+            "my_team": self.teams[player_number-1],
             "cards_played": self.cards_played,
             "tricks_won_by": self.tricks_won_by,
             "player_trick_points": self.player_trick_points,
             "team_trick_points": self.team_trick_points,
-            "action_mask": action_mask #  "AgileRL requires action masks to be defined in the information dictionary."
+            "action_mask": action_mask
         }
         return observation
 
@@ -366,14 +327,35 @@ class raw_env(AECEnv):
 
     def set_game_result(self, winning_team):
         winning_players_indices = None
+        winning_trick_points = self.team_trick_points[winning_team]
+        game_points = 1
 
         # winning_team=0 means 'Reh' won
         if winning_team==0:
             winning_players_indices = np.where(self.teams == 0)[0]
 
+            if winning_trick_points>150:
+                game_points += 1
+            if winning_trick_points>180:
+                game_points += 1
+            if winning_trick_points>210:
+                game_points += 1
+            if winning_trick_points==240:
+                game_points += 1
+
 
         else:
             winning_players_indices = np.where(self.teams == 1)[0]
+            game_points += 1 # against the Olds point "Gegen die Alten"
+
+            if winning_trick_points>150:
+                game_points += 1
+            if winning_trick_points>180:
+                game_points += 1
+            if winning_trick_points>210:
+                game_points += 1
+            if winning_trick_points==240:
+                game_points += 1
 
         print(self.player_trick_points)
         print(self.team_trick_points)
@@ -381,6 +363,7 @@ class raw_env(AECEnv):
         print(f"WINNING PLAYER INDICES:  {winning_players_indices}")
         for i, name in enumerate(self.agents):
             self.terminations[name] = True
+            self.rewards[name] = game_points if i in winning_players_indices else -game_points
             print(f"player_i: {i} | {name} | reward {self.rewards[name]}")
             self.infos[name] = {"legal_moves": []}
 

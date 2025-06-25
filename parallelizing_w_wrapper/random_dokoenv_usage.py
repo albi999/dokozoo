@@ -1,8 +1,8 @@
-import doko_environment_mdp_minimal
+import tb_doko_rewards_env
 import numpy as np
 
-env = doko_environment_mdp_minimal.env(render_mode = "ansi")
-env.reset(seed=42)
+env = tb_doko_rewards_env.env(render_mode = "ansi")
+env.reset() # possible to pass seed but I'm not doing that
 
 
 for agent in env.agent_iter():
