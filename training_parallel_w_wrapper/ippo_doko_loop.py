@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import tb_doko_env_V3
@@ -29,7 +30,8 @@ agent = IPPO(
     action_spaces=action_spaces,
     agent_ids=agent_ids,
     device=device,
-    batch_size=128,
+    batch_size=128, 
+    learn_step=64 # TODO change
 )
 
 # Define training loop parameters
@@ -147,3 +149,14 @@ while agent.steps[-1] < max_steps:
         pbar.set_description(f"Score: {np.mean(completed_episode_scores[-10:])}")
 
     agent.steps[-1] += steps
+
+
+# Save the trained algorithm
+path = "./models/IPPO"
+filename = "IPPO_trained_agent.pt"
+os.makedirs(path, exist_ok=True)
+save_path = os.path.join(path, filename)
+agent.save_checkpoint(save_path)
+
+pbar.close()
+env.close()

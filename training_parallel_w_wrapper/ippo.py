@@ -587,7 +587,15 @@ class IPPO(MultiAgentRLAlgorithm):
         states, actions, log_probs, rewards, dones, values, next_states, next_dones = (
             map(self.assemble_shared_inputs, experiences)
         )
-
+        #!!!
+        """ print(f"STATES : {states}")
+        print(f"ACTIONS : {actions}")
+        print(f"LOGPROBS : {log_probs}")
+        print(f"REWARDS : {rewards}")
+        print(f"DONES : {dones}")
+        print(f"VALUES : {values}")
+        print(f"NEXT_STATES : {next_states}")
+        print(f"NEXT_DONES : {next_dones}") """
         loss_dict = {}
         for shared_id, state in states.items():
             agent_idx = self.shared_agent_ids.index(shared_id)
@@ -659,7 +667,10 @@ class IPPO(MultiAgentRLAlgorithm):
 
         for agent_id in next_state.keys():
             agent_next_state = next_state[agent_id]
-            if agent_next_state is None or np.isnan(agent_next_state).all():
+
+            #!!!
+
+            """ if agent_next_state is None or np.isnan(agent_next_state).all():
                 agent_states = states[agent_id]
                 agent_dones = dones[agent_id]
                 agent_rewards = rewards[agent_id]
@@ -674,7 +685,7 @@ class IPPO(MultiAgentRLAlgorithm):
 
                 actions[agent_id] = actions[agent_id][:-1]
                 log_probs[agent_id] = log_probs[agent_id][:-1]
-                values[agent_id] = values[agent_id][:-1]
+                values[agent_id] = values[agent_id][:-1] """
 
         log_probs, rewards, dones, values = map(
             vectorize_experiences_by_agent, (log_probs, rewards, dones, values)
@@ -692,7 +703,12 @@ class IPPO(MultiAgentRLAlgorithm):
             dones = dones.reshape(num_steps, -1)
             values = values.reshape(num_steps, -1)
             next_done = next_done.reshape(1, -1)
-
+            
+            #!!! 
+            print('### [START] [in _learn_individual in ippo.py ###]')
+            print(f'obs_space : {obs_space}')
+            print(f"next_state : {next_state}")
+            print('### [END] [in _learn_individual in ippo.py ###]')
             next_state = preprocess_observation(
                 obs_space, next_state, self.device, self.normalize_images
             )

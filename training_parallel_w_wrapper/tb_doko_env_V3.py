@@ -106,15 +106,15 @@ class raw_env(AECEnv):
                 "my_cards": MultiDiscrete(10 * [21]),
                 "my_team": Discrete(2),
                 # "cards_played": MultiDiscrete(10 * [4 * [21]]), # scrapped because V3
-                "trick_1_cards": MultiDiscrete(4 * [21]),
-                "trick_2_cards": MultiDiscrete(4 * [21]),
-                "trick_3_cards": MultiDiscrete(4 * [21]),
-                "trick_4_cards": MultiDiscrete(4 * [21]),
-                "trick_5_cards": MultiDiscrete(4 * [21]),
-                "trick_6_cards": MultiDiscrete(4 * [21]),
-                "trick_7_cards": MultiDiscrete(4 * [21]),
-                "trick_8_cards": MultiDiscrete(4 * [21]),
-                "trick_9_cards": MultiDiscrete(4 * [21]),
+                "trick_01_cards": MultiDiscrete(4 * [21]),
+                "trick_02_cards": MultiDiscrete(4 * [21]),
+                "trick_03_cards": MultiDiscrete(4 * [21]),
+                "trick_04_cards": MultiDiscrete(4 * [21]),
+                "trick_05_cards": MultiDiscrete(4 * [21]),
+                "trick_06_cards": MultiDiscrete(4 * [21]),
+                "trick_07_cards": MultiDiscrete(4 * [21]),
+                "trick_08_cards": MultiDiscrete(4 * [21]),
+                "trick_09_cards": MultiDiscrete(4 * [21]),
                 "trick_10_cards": MultiDiscrete(4 * [21]),
                 "tricks_won_by": MultiDiscrete(10 * [5]),
                 "player_trick_points": MultiDiscrete(4*[240]),
@@ -333,7 +333,6 @@ class raw_env(AECEnv):
                 for name in self.agents:
                     self.terminations[name] = True
                     self.infos[name] = {"legal_moves": []}
-
                 if self.render_mode == "ansi":
                     for name in self.agents:
                         print(f"{name} | reward {self.rewards[name]}")
@@ -381,15 +380,15 @@ class raw_env(AECEnv):
             "my_cards": self.player_cards[player_number-1], 
             "my_team": self.teams[player_number-1],
             # "cards_played": self.cards_played, # scrapped because V3
-            "trick_1_cards": self.cards_played[0],
-            "trick_2_cards": self.cards_played[1],
-            "trick_3_cards": self.cards_played[2],
-            "trick_4_cards": self.cards_played[3],
-            "trick_5_cards": self.cards_played[4],
-            "trick_6_cards": self.cards_played[5],
-            "trick_7_cards": self.cards_played[6],
-            "trick_8_cards": self.cards_played[7],
-            "trick_9_cards": self.cards_played[8],
+            "trick_01_cards": self.cards_played[0],
+            "trick_02_cards": self.cards_played[1],
+            "trick_03_cards": self.cards_played[2],
+            "trick_04_cards": self.cards_played[3],
+            "trick_05_cards": self.cards_played[4],
+            "trick_06_cards": self.cards_played[5],
+            "trick_07_cards": self.cards_played[6],
+            "trick_08_cards": self.cards_played[7],
+            "trick_09_cards": self.cards_played[8],
             "trick_10_cards": self.cards_played[9],
             "tricks_won_by": self.tricks_won_by,
             "player_trick_points": self.player_trick_points,
