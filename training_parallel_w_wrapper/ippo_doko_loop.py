@@ -31,7 +31,7 @@ agent = IPPO(
     agent_ids=agent_ids,
     device=device,
     batch_size=128, 
-    learn_step=64 # TODO change
+    learn_step=128 # TODO change
 )
 
 # Define training loop parameters
@@ -63,7 +63,9 @@ while agent.steps[-1] < max_steps:
             action, log_prob, entropy, value = agent.get_action(
                 obs=obs, infos=info
             )
-
+            print("!")
+            print("ippo_doko_loop.py")
+            print(action)
             # Clip to action space
             clipped_action = {}
             for agent_id, agent_action in action.items():
@@ -79,7 +81,7 @@ while agent.steps[-1] < max_steps:
                     clipped_agent_action = agent_action
 
                 clipped_action[agent_id] = clipped_agent_action
-
+            
             # Act in environment
             next_obs, reward, termination, truncation, info = env.step(
                 clipped_action

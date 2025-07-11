@@ -366,8 +366,8 @@ class IPPO(MultiAgentRLAlgorithm):
 
                 action_masks[homo_id] = None
 
-            else: """
-
+            else:
+ """
             action_masks[homo_id] = np.stack(action_masks[homo_id], axis=0) # added because Tensor was acting up about the list
 
             action_masks[homo_id] = torch.Tensor(action_masks[homo_id])
@@ -582,20 +582,22 @@ class IPPO(MultiAgentRLAlgorithm):
         :return: Loss dictionary
         :rtype: Dict[str, torch.Tensor]
         """
-
+        
         # process experiences
         states, actions, log_probs, rewards, dones, values, next_states, next_dones = (
             map(self.assemble_shared_inputs, experiences)
         )
+
+
         #!!!
-        """ print(f"STATES : {states}")
+        print(f"STATES : {states}")
         print(f"ACTIONS : {actions}")
         print(f"LOGPROBS : {log_probs}")
         print(f"REWARDS : {rewards}")
         print(f"DONES : {dones}")
         print(f"VALUES : {values}")
         print(f"NEXT_STATES : {next_states}")
-        print(f"NEXT_DONES : {next_dones}") """
+        print(f"NEXT_DONES : {next_dones}")
         loss_dict = {}
         for shared_id, state in states.items():
             agent_idx = self.shared_agent_ids.index(shared_id)
@@ -705,10 +707,10 @@ class IPPO(MultiAgentRLAlgorithm):
             next_done = next_done.reshape(1, -1)
             
             #!!! 
-            print('### [START] [in _learn_individual in ippo.py ###]')
+            """ print('### [START] [in _learn_individual in ippo.py ###]')
             print(f'obs_space : {obs_space}')
             print(f"next_state : {next_state}")
-            print('### [END] [in _learn_individual in ippo.py ###]')
+            print('### [END] [in _learn_individual in ippo.py ###]') """
             next_state = preprocess_observation(
                 obs_space, next_state, self.device, self.normalize_images
             )

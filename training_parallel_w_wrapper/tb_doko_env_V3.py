@@ -89,7 +89,7 @@ class raw_env(AECEnv):
         """
         self.render_mode = render_mode
         
-        self.possible_agents = ['agent_1', 'agent_2', 'agent_3', 'agent_4']
+        self.possible_agents = ['agentt1', 'agentt2', 'agentt3', 'agentt4']
         self.agent_selection = None
         self.starter = None 
 
@@ -251,7 +251,7 @@ class raw_env(AECEnv):
             return self._was_dead_step(action)
         
         if self.render_mode == "ansi":
-            print(self.render(action))
+            print(self.render())
 
 
         r = self.round
@@ -290,7 +290,7 @@ class raw_env(AECEnv):
                 trick_winning_indices = np.where(self.teams == 1)[0]
                 for agent_index in trick_winning_indices:
                     agent_number = agent_index+1
-                    agent_string = "agent_" + str(agent_number)
+                    agent_string = "agentt" + str(agent_number)
                     self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
 
             # else aka someone from Team Re won
@@ -301,7 +301,7 @@ class raw_env(AECEnv):
                 trick_winning_indices = np.where(self.teams == 0)[0]
                 for agent_index in trick_winning_indices:
                     agent_number = agent_index+1
-                    agent_string = "agent_" + str(agent_number)
+                    agent_string = "agentt" + str(agent_number)
                     self.rewards[agent_string] += trick_points # TODO rewards vs cumulative rewards
 
             
@@ -637,7 +637,7 @@ class raw_env(AECEnv):
             render = self.build_dynamic_grid_with_content(self.round+2, 8, gridcontent, 9, 1)
             return render
         
-    def render(self, action):
+    def render(self):
         if self.render_mode is None:
             gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode."
@@ -687,7 +687,7 @@ class raw_env(AECEnv):
                     cardsinhand_string += f"{self.unique_cards[card-1].__repr__()} "
             render += self.fline_oneblock(cardsinhand_string, width) + '\n'
             
-            render += self.fline_oneblock(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
+            # render += self.fline_oneblock(f"{'action':<20}: {self.unique_cards[action].__repr__()}", width) + '\n'
             render += '╚' + '═'*(width+1) + '╝'
 
 
