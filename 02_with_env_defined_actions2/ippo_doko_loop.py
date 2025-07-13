@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-import tb_doko_env_V3
+import tb_doko_env_V4
 from gymnasium import spaces
 # from conversions import turn_based_aec_to_parallel
 from pettingzoo.utils import turn_based_aec_to_parallel
@@ -9,13 +9,14 @@ from tqdm import tqdm
 
 # from agilerl.algorithms import IPPO
 from ippo import IPPO
-from agilerl.vector.pz_async_vec_env import AsyncPettingZooVecEnv
+# from agilerl.vector.pz_async_vec_env import AsyncPettingZooVecEnv
+from pz_async_vec_env import AsyncPettingZooVecEnv
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_envs = 4    
 env = AsyncPettingZooVecEnv(
     [
-        lambda: turn_based_aec_to_parallel(tb_doko_env_V3.env())
+        lambda: turn_based_aec_to_parallel(tb_doko_env_V4.env())
         for _ in range(num_envs)
     ]
 )
