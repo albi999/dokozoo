@@ -261,7 +261,8 @@ class raw_env(AECEnv):
         agent = self.agent_selection
         agent_number = int(agent[6])
 
-
+        # setting rewards to 0
+        self.rewards = {i: 0 for i in self.agents}
 
         
         cards_in_hand = self.player_cards[agent_number-1]

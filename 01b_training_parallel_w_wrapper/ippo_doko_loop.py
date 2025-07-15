@@ -58,34 +58,34 @@ while agent.steps[-1] < max_steps:
 
         for _ in range(-(agent.learn_step // -num_envs)):
             
-            print("################# [OBS] ###################")
-            print(obs)
+            # print("################# [OBS] ###################")
+            # print(obs)
 
-            print("################# [INFO] ###################")
-            print(info)
+            # print("################# [INFO] ###################")
+            # print(info)
+
             # Get next action from agent
             action, log_prob, entropy, value = agent.get_action(
                 obs=obs, infos=info
             )
-            # print("!")
-            # print("ippo_doko_loop.py")
-            print("################# [ACTION] ###################")
-            print(action)
+            
+            
+            # print("################# [ACTION] ###################")
+            # print(action)
 
 
-            # TODO ignore hallucinated actions
+            # ignore hallucinated actions
             # get active_agents from info_dict
             first_agent = agent.agent_ids[0]
             active_agents = info[first_agent]['active_agent']
-            print(active_agents)
-            print(action.keys())
+            # print(active_agents)
             for ag in action.keys():
                 for n in range(num_envs):
                     if ag != active_agents[n]:
                         action[ag][n] = 20
 
-            print("################# [CORRECTED ACTION] ###################")
-            print(action)
+            # print("################# [CORRECTED ACTION] ###################")
+            # print(action)
 
             # Clip to action space
             clipped_action = {}
