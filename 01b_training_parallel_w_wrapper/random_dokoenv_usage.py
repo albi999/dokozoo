@@ -1,7 +1,7 @@
-import tb_doko_env_V3
+import tb_doko_env_V4
 import numpy as np
 
-env = tb_doko_env_V3.env(render_mode = "ansi")
+env = tb_doko_env_V4.env(render_mode = "ansi")
 env.reset() # possible to pass seed but I'm not doing that
 
 

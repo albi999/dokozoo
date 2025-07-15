@@ -12,7 +12,7 @@ from ippo import IPPO
 from agilerl.vector.pz_async_vec_env import AsyncPettingZooVecEnv
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_envs = 2    
+num_envs = 4    
 env = AsyncPettingZooVecEnv(
     [
         lambda: turn_based_aec_to_parallel(tb_doko_env_V4.env())
@@ -32,7 +32,7 @@ agent = IPPO(
     agent_ids=agent_ids,
     device=device,
     batch_size=128, 
-    learn_step=32 # TODO change
+    learn_step=40 # TODO change
 )
 
 # Define training loop parameters
