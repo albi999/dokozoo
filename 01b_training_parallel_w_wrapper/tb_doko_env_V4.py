@@ -103,7 +103,6 @@ class raw_env(AECEnv):
                 "agent_4_cards": MultiDiscrete(10 * [21]),
                 "round": Discrete(10),
                 "teams": MultiDiscrete(4 * [2]),
-                "my_cards": MultiDiscrete(10 * [21]),
                 "my_team": Discrete(2),
                 # "cards_played": MultiDiscrete(10 * [4 * [21]]), # scrapped because V3
                 "trick_01_cards": MultiDiscrete(4 * [21]),
@@ -380,8 +379,7 @@ class raw_env(AECEnv):
             "agent_3_cards": self.player_cards[2],
             "agent_4_cards": self.player_cards[3],
             "round": r,
-            "teams": self.teams,
-            "my_cards": self.player_cards[player_number-1], 
+            "teams": self.teams, 
             "my_team": self.teams[player_number-1],
             # "cards_played": self.cards_played, # scrapped because V3
             "trick_01_cards": self.cards_played[0],
