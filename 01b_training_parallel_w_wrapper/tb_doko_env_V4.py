@@ -1,6 +1,6 @@
 import random
 from typing import Union
-from copy import copy
+from copy import copy, deepcopy
 import numpy as np
 from gymnasium.spaces import Discrete, MultiBinary, MultiDiscrete, Dict as SpaceDict
 import gymnasium
@@ -158,7 +158,13 @@ class raw_env(AECEnv):
 
         # agent_selection, starter
         # random starter but still that 1 comes after 4, 2 after 1, 3 after 2, 4 after 3
-        rand4 = random.Random().randrange(4)
+        if seed is not None:
+            ind_rand_gen = random.Random(seed)
+            rand4 = ind_rand_gen.randrange(4)
+        else:
+            rand4 = random.Random().randrange(4)
+        # print(f"rand4: {rand4}")
+
         random_agent_order = np.roll(copy(self.agents), rand4)
         self._agent_selector = agent_selector(random_agent_order)
         self.agent_selection = self._agent_selector.reset()
@@ -168,13 +174,17 @@ class raw_env(AECEnv):
         self.unique_cards = create_unique_cards()
         # dealing
         deck = np.repeat(np.arange(1,21), 2)
-        random.Random().shuffle(deck)
-        player1_cards = deck[:10]
-        player2_cards = deck[10:20]
-        player3_cards = deck[20:30]
-        player4_cards = deck[30:40]
+        if seed is not None:
+            ind_rand_gen.shuffle(deck)
+        else:
+            random.Random().shuffle(deck)
+
+        player1_cards = np.sort(deepcopy(deck[:10]))
+        player2_cards = np.sort(deepcopy(deck[10:20]))
+        player3_cards = np.sort(deepcopy(deck[20:30]))
+        player4_cards = np.sort(deepcopy(deck[30:40]))
         self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
-        # self.print_player_cards()
+
 
         # TODO: maybe overthink how to shuffle randomly 
         # TODO: maybe use seeds
@@ -191,17 +201,26 @@ class raw_env(AECEnv):
                 # print(f"#reshuffles = {reshuffles}")
 
                 deck = np.repeat(np.arange(1,21), 2)
-                random.Random().shuffle(deck)
-                player1_cards = deck[:10]
-                player2_cards = deck[10:20]
-                player3_cards = deck[20:30]
-                player4_cards = deck[30:40]
+
+                if seed is not None:
+                    ind_rand_gen.shuffle(deck)
+                else:
+                    random.Random().shuffle(deck)
+                player1_cards = np.sort(deepcopy(deck[:10]))
+                player2_cards = np.sort(deepcopy(deck[10:20]))
+                player3_cards = np.sort(deepcopy(deck[20:30]))
+                player4_cards = np.sort(deepcopy(deck[30:40]))
                 self.player_cards = [player1_cards, player2_cards, player3_cards, player4_cards]
 
-                # self.print_player_cards()
+                
             
             else:
                 break
+
+
+        # print(f"reshuffles: {reshuffles}")
+        # self.print_player_cards()
+        
 
 
         # rounds, game_type, teams

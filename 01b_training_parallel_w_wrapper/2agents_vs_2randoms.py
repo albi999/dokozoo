@@ -13,7 +13,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Configure the environment
-    env = turn_based_aec_to_parallel(tb_doko_env_V4.env(render_mode = "ansi"))
+    # env = turn_based_aec_to_parallel(tb_doko_env_V4.env(render_mode = "ansi"))
+    env = turn_based_aec_to_parallel(tb_doko_env_V4.env())
     env.reset()
     try:
         state_dim = [env.observation_space(agent).n for agent in env.agents]
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     ippo = IPPO.load(path, device)
 
     # Define test loop parameters
-    episodes = 1  # Number of episodes to test agent on
+    episodes = 10  # Number of episodes to test agent on
     max_steps = 40  # Max number of steps to take in the environment in each episode TODO: probably 40, maybe 10
 
     rewards = []  # List to collect total episodic reward
@@ -59,12 +60,11 @@ if __name__ == "__main__":
 
 
 
-    ippo_agents = ['agentt1', 'agentt2']
-    random_agents = ['agentt3', 'agentt4']
+
 
     # Test loop for inference
     for ep in range(episodes):
-        state, info = env.reset()
+        state, info = env.reset(ep)
 
         termination = {agent_id: False for agent_id in agent_ids}
         truncation = {agent_id: False for agent_id in agent_ids}
@@ -72,16 +72,30 @@ if __name__ == "__main__":
         agent_reward = {agent_id: 0 for agent_id in agent_ids}
         score = 0
 
+
+        # TODO determine which agents are ippo_agents and which are random
+        # let's say agentt1 is always an IPPO agent
+        # print(env.aec_env.teams)
+        agentt1_team = env.aec_env.teams[0]
+        # print(agentt1_team)
+        ippo_agents_indices = np.where(env.aec_env.teams == agentt1_team)[0]
+
+        ippo_agents = []
+        for i in ippo_agents_indices:
+            ippo_agents.append(f"agentt{i+1}")
+
+        print(ippo_agents)
+
         for _ in range(max_steps):
             active_agent = env.aec_env.agent_selection
-            print(f"active_agent: {active_agent}")
+            # print(f"active_agent: {active_agent}")
 
             if active_agent in ippo_agents:
                 # Get next action from IPPO-agent
                 action, log_prob, entropy, value = ippo.get_action(
                     obs=state, infos=info
                 )
-                print(f"agent_action: {action}")
+                # print(f"ippo_action: {action}")
             else: 
                 
                 # get random action
@@ -114,7 +128,7 @@ if __name__ == "__main__":
                     else:
                         action[agent] = np.array([20])
 
-                print(f"random_action: {action}")
+                # print(f"random_action: {action}")
             
             # Take action in environment
             state, reward, termination, truncation, info = env.step(

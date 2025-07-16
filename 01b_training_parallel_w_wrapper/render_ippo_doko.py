@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import torch
-import tb_doko_env_V4
+import tb_doko_env_V5
 from pettingzoo.utils.conversions import turn_based_aec_to_parallel
 
 # from agilerl.algorithms import IPPO
@@ -13,7 +13,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Configure the environment
-    env = turn_based_aec_to_parallel(tb_doko_env_V4.env(render_mode = "ansi"))
+    env = turn_based_aec_to_parallel(tb_doko_env_V5.env(render_mode = "ansi"))
     env.reset()
     try:
         state_dim = [env.observation_space(agent).n for agent in env.agents]
@@ -37,11 +37,11 @@ if __name__ == "__main__":
     agent_ids = env.agents
 
     # Load the saved agent
-    path = "./models/IPPO/IPPO_trained_agent.pt"
+    path = "./models/IPPO/IPPO_min_avg_loss.pt"
     ippo = IPPO.load(path, device)
 
     # Define test loop parameters
-    episodes = 10  # Number of episodes to test agent on
+    episodes = 1  # Number of episodes to test agent on
     max_steps = 40  # Max number of steps to take in the environment in each episode TODO: probably 40, maybe 10
 
     rewards = []  # List to collect total episodic reward
