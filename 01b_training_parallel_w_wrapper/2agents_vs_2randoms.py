@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import torch
-import tb_doko_env_V4
+import tb_doko_env_V5
 from pettingzoo.utils.conversions import turn_based_aec_to_parallel
 
 # from agilerl.algorithms import IPPO
@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     # Configure the environment
     # env = turn_based_aec_to_parallel(tb_doko_env_V4.env(render_mode = "ansi"))
-    env = turn_based_aec_to_parallel(tb_doko_env_V4.env())
+    env = turn_based_aec_to_parallel(tb_doko_env_V5.env())
     env.reset()
     try:
         state_dim = [env.observation_space(agent).n for agent in env.agents]
@@ -38,24 +38,19 @@ if __name__ == "__main__":
     agent_ids = env.agents
 
     # Load the saved agent
-    path = "./models/IPPO/IPPO_trained_agent.pt"
+    path = "./models/IPPO/IPPO_min_avg_loss.pt"
     ippo = IPPO.load(path, device)
 
     # Define test loop parameters
     episodes = 10  # Number of episodes to test agent on
-    max_steps = 40  # Max number of steps to take in the environment in each episode TODO: probably 40, maybe 10
+    max_steps = 40  # Max number of steps to take in the environment in each episode = 40
 
     rewards = []  # List to collect total episodic reward
-    frames = []  # List to collect frames
+    ippo_rewards = [] # List to collect sum of episodic reward of IPPO agents
     indi_agent_rewards = {
         agent_id: [] for agent_id in agent_ids
     }  # Dictionary to collect inidivdual agent rewards
 
-    rewards = []  # List to collect total episodic reward
-    frames = []  # List to collect frames
-    indi_agent_rewards = {
-        agent_id: [] for agent_id in agent_ids
-    }  # Dictionary to collect inidivdual agent rewards
 
 
 
@@ -65,6 +60,7 @@ if __name__ == "__main__":
     # Test loop for inference
     for ep in range(episodes):
         state, info = env.reset(ep)
+        env.aec_env.print_player_cards()
 
         termination = {agent_id: False for agent_id in agent_ids}
         truncation = {agent_id: False for agent_id in agent_ids}
@@ -73,7 +69,7 @@ if __name__ == "__main__":
         score = 0
 
 
-        # TODO determine which agents are ippo_agents and which are random
+        # determine which agents are ippo_agents and which are random
         # let's say agentt1 is always an IPPO agent
         # print(env.aec_env.teams)
         agentt1_team = env.aec_env.teams[0]
@@ -84,7 +80,7 @@ if __name__ == "__main__":
         for i in ippo_agents_indices:
             ippo_agents.append(f"agentt{i+1}")
 
-        print(ippo_agents)
+        
 
         for _ in range(max_steps):
             active_agent = env.aec_env.agent_selection
@@ -97,7 +93,6 @@ if __name__ == "__main__":
                 )
                 # print(f"ippo_action: {action}")
             else: 
-                
                 # get random action
                 if termination[active_agent] or truncation[active_agent]:
                     print("term trunc")
@@ -135,20 +130,16 @@ if __name__ == "__main__":
                 {agent: a.squeeze() for agent, a in action.items()}
             )   
 
-        
-
-            
             # Save agent's reward for this step in this episode
             for agent_id, r in reward.items():
                 agent_reward[agent_id] += r
-
-            # Determine total score for the episode and then append to rewards list
-            score = sum(agent_reward.values())
 
             # Stop episode if any agents have terminated
             if any(truncation.values()) or any(termination.values()):
                 break
 
+        # Determine total score for the episode and then append to rewards list
+        score = sum(agent_reward.values())
         rewards.append(score)
 
         # Record agent specific episodic reward
@@ -156,9 +147,20 @@ if __name__ == "__main__":
             indi_agent_rewards[agent_id].append(agent_reward[agent_id])
 
         print("-" * 15, f"Episode: {ep}", "-" * 15)
+        print(ippo_agents)
+        print("IPPO agents rewards:")
+        ippo_reward = 0
+        for agent_id in ippo_agents:
+            print(f"{agent_id} reward: {indi_agent_rewards[agent_id][-1]}")
+            ippo_reward += indi_agent_rewards[agent_id][-1]
+        print(f"IPPO agent sum: {ippo_reward}")
+        ippo_rewards.append(ippo_reward)
         print("Episodic Reward: ", rewards[-1])
         for agent_id, reward_list in indi_agent_rewards.items():
             print(f"{agent_id} reward: {reward_list[-1]}")
+
+    print(ippo_rewards)
+    print(np.mean(ippo_rewards))
     env.close()
 
     

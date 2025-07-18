@@ -37,7 +37,7 @@ if __name__ == "__main__":
     agent_ids = env.agents
 
     # Load the saved agent
-    path = "./models/IPPO/IPPO_min_avg_loss.pt"
+    path = "./models/IPPO/IPPO_max_avg_IPPO_reward.pt"
     ippo = IPPO.load(path, device)
 
     # Define test loop parameters
